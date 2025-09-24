@@ -10,7 +10,7 @@ namespace Controllers.Movement;
 /// Contains the base for handling movement controls.
 /// Inherently, this class doesn't do much by itself, just defines useful things for different controller types.
 /// </summary>
-public abstract class MovementController : Component
+public abstract class MovementController3D : Component
 {
 	[Property, Category( "Components" ), RequireComponent]
 	public Rigidbody Rigidbody { get; set; }
@@ -40,7 +40,7 @@ public abstract class MovementController : Component
 
 		if ( Colliders is null || Colliders.Count == 0 || Colliders.Any( c => !c.IsValid() ) )
 		{
-			Log.Error( $"{nameof(MovementController)} requires at least one valid collider." );
+			Log.Error( $"{this} requires at least one valid collider." );
 		}
 	}
 
