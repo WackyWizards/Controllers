@@ -5,7 +5,7 @@ using Sandbox;
 namespace Controllers.Movement;
 
 // ReSharper disable once ClassNeverInstantiated.Global
-public partial class WalkController
+public partial class WalkController3D : MovementController3D
 {
 	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
 	private bool CanCrouch { get; set; } = true;

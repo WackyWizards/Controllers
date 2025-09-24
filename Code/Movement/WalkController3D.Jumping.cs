@@ -3,7 +3,7 @@
 namespace Controllers.Movement;
 
 // ReSharper disable once ClassNeverInstantiated.Global
-public partial class WalkController
+public partial class WalkController3D : MovementController3D
 {
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
 	private bool CanJump { get; set; } = true;

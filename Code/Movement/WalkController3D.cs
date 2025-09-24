@@ -5,8 +5,11 @@ using Sandbox.Diagnostics;
 
 namespace Controllers.Movement;
 
+/// <summary>
+/// 3D Character Walk Controller.
+/// </summary>
 // ReSharper disable once ClassNeverInstantiated.Global
-public partial class WalkController : MovementController
+public partial class WalkController3D : MovementController3D
 {
 	[Property, Category( "Components" ), RequireComponent]
 	public CitizenAnimationHelper AnimationHelper { get; set; }
@@ -64,7 +67,7 @@ public partial class WalkController : MovementController
 		// TODO: Allow other collider types for floor detection
 		if ( !Colliders.OfType<BoxCollider>().Any() )
 		{
-			Log.Warning( $"{nameof(MovementController)} currently only supports a BoxCollider for feet!" );
+			Log.Warning( $"{this} currently only supports a BoxCollider for feet!" );
 		}
 
 		FloorCollider = Colliders.FirstOrDefault( x => x is BoxCollider ) as BoxCollider;
