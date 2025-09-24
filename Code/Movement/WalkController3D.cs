@@ -48,7 +48,7 @@ public partial class WalkController3D : MovementController3D
 	private float GroundRayDistance { get; set; } = 2f;
 
 	private float _speed;
-	private Vector3 _movementInput;
+	private Vector2 _movementInput;
 	private Rotation _rotation;
 	private float _originalCapsuleHeight;
 	private Vector3 _originalBoxSize;
@@ -103,7 +103,7 @@ public partial class WalkController3D : MovementController3D
 			// Apply basic inputs
 			var input = Input.AnalogMove;
 			_rotation = Rotation.FromYaw( EyeAngles.yaw );
-			_movementInput = new Vector3( input.x, input.y, 0 );
+			_movementInput = new Vector2( input.x, input.y );
 
 			// Store grounded state for next frame
 			_wasGroundedLastFrame = IsGrounded;
