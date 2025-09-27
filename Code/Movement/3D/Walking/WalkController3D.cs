@@ -15,31 +15,31 @@ public partial class WalkController3D : MovementController3D
 	public CitizenAnimationHelper AnimationHelper { get; set; }
 
 	[Property, Category( "State" ), ReadOnly, Sync]
-	private bool IsGrounded { get; set; } = true;
+	public bool IsGrounded { get; set; } = true;
 
 	[Property]
-	private float StepHeight { get; set; } = 24f;
+	public float StepHeight { get; set; } = 24f;
 
 	[Property]
-	private float SlopeAngle { get; set; } = 24f;
+	public float SlopeAngle { get; set; } = 24f;
 
 	[Property]
-	private float AccelerationRate { get; set; } = 8000f;
+	public float AccelerationRate { get; set; } = 8000f;
 
 	[Property]
-	private float Speed { get; set; } = 200f;
+	public float Speed { get; set; } = 200f;
 
 	[Property]
-	private float AirControl { get; set; } = 1f;
+	public float AirControl { get; set; } = 1f;
 	
 	[Property]
-	private float AirInfluence { get; set; } = 0.3f;
+	public float AirInfluence { get; set; } = 0.3f;
 
 	[Property]
-	private float Friction { get; set; } = 6.0f;
+	public float Friction { get; set; } = 6.0f;
 
 	[Property]
-	private float SkinWidth { get; set; } = 0.1f;
+	public float SkinWidth { get; set; } = 0.1f;
 
 	private BoxCollider FloorCollider { get; set; }
 	private float GroundRayDistance { get; set; } = 2f;

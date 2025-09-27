@@ -8,19 +8,19 @@ namespace Controllers.Movement;
 public partial class WalkController3D : MovementController3D
 {
 	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
-	private bool CanCrouch { get; set; } = true;
+	public bool CanCrouch { get; set; } = true;
 
 	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
-	private float CrouchHeight { get; set; } = 0.6f;
+	public float CrouchHeight { get; set; } = 0.6f;
 
 	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
-	private float CrouchTransitionSpeed { get; set; } = 7.0f;
+	public float CrouchTransitionSpeed { get; set; } = 7.0f;
 
 	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" ), ReadOnly, Sync]
-	private bool IsCrouched { get; set; } = false;
+	public bool IsCrouched { get; set; } = false;
 
 	[Property, Group( "Inputs" ), InputAction]
-	private string CrouchInput { get; set; } = "duck";
+	public string CrouchInput { get; set; } = "duck";
 
 	private bool WishCrouch { get; set; }
 	

@@ -19,15 +19,15 @@ public abstract class MovementController3D : Component
 	public CameraController CameraController { get; set; }
 
 	[Property, Category( "Components" )]
-	protected List<Collider> Colliders { get; set; } = [];
+	public List<Collider> Colliders { get; set; } = [];
 
 	[Sync]
-	protected Vector3 WishVelocity { get; set; }
+	public Vector3 WishVelocity { get; set; }
 
 	[Sync]
-	protected Angles EyeAngles { get; set; }
+	public Angles EyeAngles { get; set; }
 
-	protected Vector3 Velocity => Rigidbody?.Velocity ?? Vector3.Zero;
+	public Vector3 Velocity => Rigidbody?.Velocity ?? Vector3.Zero;
 
 	private static readonly Logger Log = new("MovementController");
 

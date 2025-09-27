@@ -6,19 +6,19 @@ namespace Controllers.Movement;
 public partial class WalkController3D : MovementController3D
 {
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
-	private bool CanJump { get; set; } = true;
+	public bool CanJump { get; set; } = true;
 
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
-	private float JumpForce { get; set; } = 250.0f;
+	public float JumpForce { get; set; } = 250.0f;
 	
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
-	private float CoyoteTime { get; set; } = 0.15f;
+	public float CoyoteTime { get; set; } = 0.15f;
 	
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
-	private float JumpBufferTime { get; set; } = 0.2f;
+	public float JumpBufferTime { get; set; } = 0.2f;
 	
 	[Property, Group( "Inputs" ), InputAction]
-	private string JumpInput { get; set; } = "Jump";
+	public string JumpInput { get; set; } = "Jump";
 	
 	private bool WishJump { get; set; }
 	
