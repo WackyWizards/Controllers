@@ -8,7 +8,7 @@ public abstract class CameraController : Component
 	public Angles EyeAngles { get; set; }
 
 	[Property]
-	protected virtual bool UsePreferredFov { get; set; } = true;
+	private bool UsePreferredFov { get; set; } = true;
     
 	protected CameraComponent Camera => Scene.Camera;
 
