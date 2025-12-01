@@ -17,16 +17,20 @@ public abstract class MovementController3D : Component
 
 	[Property, Category( "Components" ), RequireComponent]
 	public CameraController CameraController { get; set; }
-
+	
+	// ReSharper disable once MemberCanBeProtected.Global
 	[Property, Category( "Components" )]
 	public List<Collider> Colliders { get; set; } = [];
 
 	[Sync]
+	// ReSharper disable once MemberCanBeProtected.Global
 	public Vector3 WishVelocity { get; set; }
 
 	[Sync]
+	// ReSharper disable once MemberCanBeProtected.Global
 	public Angles EyeAngles { get; set; }
-
+	
+	// ReSharper disable once MemberCanBeProtected.Global
 	public Vector3 Velocity => Rigidbody?.Velocity ?? Vector3.Zero;
 
 	private static readonly Logger Log = new("MovementController");

@@ -6,18 +6,23 @@ namespace Controllers.Movement;
 public partial class WalkController3D : MovementController3D
 {
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public bool CanJump { get; set; } = true;
 
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float JumpForce { get; set; } = 250.0f;
 	
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float CoyoteTime { get; set; } = 0.15f;
 	
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float JumpBufferTime { get; set; } = 0.2f;
 	
 	[Property, Group( "Inputs" ), InputAction]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public string JumpInput { get; set; } = "Jump";
 	
 	private bool WishJump { get; set; }

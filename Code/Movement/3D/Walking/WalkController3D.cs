@@ -13,32 +13,41 @@ public partial class WalkController3D : MovementController3D
 {
 	[Property, Category( "Components" ), RequireComponent]
 	public CitizenAnimationHelper AnimationHelper { get; set; }
-
+	
 	[Property, Category( "State" ), ReadOnly, Sync]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public bool IsGrounded { get; set; } = true;
-
+	
 	[Property]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float StepHeight { get; set; } = 24f;
 
 	[Property]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float SlopeAngle { get; set; } = 24f;
 
 	[Property]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float AccelerationRate { get; set; } = 8000f;
 
 	[Property]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float Speed { get; set; } = 200f;
 
 	[Property]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float AirControl { get; set; } = 1f;
 	
 	[Property]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float AirInfluence { get; set; } = 0.3f;
 
 	[Property]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float Friction { get; set; } = 6.0f;
 
 	[Property]
+	// ReSharper disable once MemberCanBePrivate.Global
 	public float SkinWidth { get; set; } = 0.1f;
 
 	private BoxCollider FloorCollider { get; set; }
