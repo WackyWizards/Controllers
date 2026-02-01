@@ -34,20 +34,21 @@ public class FirstPersonCamera : CameraController
 	
 	protected override void OnStart()
 	{
-		if ( IsProxy || !ModelParent.IsValid() )
+		if ( !IsProxy && Network.IsOwner && ModelParent.IsValid() )
 		{
-			return;
-		}
-		
-		foreach ( var model in ModelParent.GetAllObjects( true ) )
-		{
-			var renderer = model.GetComponent<ModelRenderer>();
-			
-			if ( renderer.IsValid() )
+			foreach ( var model in ModelParent.GetAllObjects( true ) )
 			{
+				var renderer = model.GetComponent<ModelRenderer>();
+				if ( !renderer.IsValid() )
+				{
+					continue;
+				}
+				
 				renderer.RenderType = ModelRenderer.ShadowRenderType.ShadowsOnly;
 			}
 		}
+		
+		base.OnStart();
 	}
 	
 	protected override void UpdateCameraPosition()
