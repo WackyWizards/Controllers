@@ -601,17 +601,37 @@ public partial class WalkController3D : MovementController3D
 	/// </summary>
 	private void GroundMove()
 	{
-		ApplyFriction( GroundFriction );
+		var friction = GetGroundFriction();
+		ApplyFriction( friction );
 		
-		if ( !(_wishVelocity.Length > 0.01f) )
+		if ( _wishVelocity.Length < 0.01f )
 		{
 			return;
 		}
 		
 		var wishDir = _wishVelocity.Normal;
+		
+		// Project movement onto ground plane
 		wishDir -= GroundNormal * Vector3.Dot( wishDir, GroundNormal );
 		wishDir = wishDir.Normal;
+		
 		Accelerate( wishDir, CurrentSpeed, Acceleration );
+	}
+	
+	private float GetGroundFriction()
+	{
+		if ( !GroundObject.IsValid() )
+		{
+			return GroundFriction;
+		}
+		
+		var collider = GroundObject.GetComponent<Collider>();
+		if ( !collider.IsValid() )
+		{
+			return GroundFriction;
+		}
+		
+		return collider.Friction ?? GroundFriction;
 	}
 	
 	/// <summary>
