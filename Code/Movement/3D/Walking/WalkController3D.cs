@@ -1,4 +1,4 @@
-﻿using System.Linq;
+﻿using System;
 using Sandbox;
 using Sandbox.Citizen;
 using Sandbox.Diagnostics;
@@ -6,378 +6,693 @@ using Sandbox.Diagnostics;
 namespace Controllers.Movement;
 
 /// <summary>
-/// 3D Character Walk Controller.
+/// Kinematic walk controller
 /// </summary>
-// ReSharper disable once ClassNeverInstantiated.Global
 public partial class WalkController3D : MovementController3D
 {
 	[Property, Category( "Components" ), RequireComponent]
 	public CitizenAnimationHelper AnimationHelper { get; set; }
 	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float WalkSpeed { get; set; } = 190f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float Acceleration { get; set; } = 10f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float AirAcceleration { get; set; } = 10f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float GroundFriction { get; set; } = 4f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float StopSpeed { get; set; } = 100f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float GroundAngle { get; set; } = 45f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float BodyGirth { get; set; } = 32f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float BodyHeight { get; set; } = 64f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float StepHeight { get; set; } = 18f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Movement" )]
+	public float Bounciness { get; set; } = 0.3f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "State" ), ReadOnly, Sync]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public bool IsGrounded { get; set; } = true;
+	public bool IsGrounded { get; set; }
 	
-	[Property]
 	// ReSharper disable once MemberCanBePrivate.Global
-	public float StepHeight { get; set; } = 24f;
-
-	[Property]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float SlopeAngle { get; set; } = 24f;
-
-	[Property]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float AccelerationRate { get; set; } = 8000f;
-
-	[Property]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float Speed { get; set; } = 200f;
-
-	[Property]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float AirControl { get; set; } = 1f;
+	[Property, Category( "State" ), ReadOnly]
+	public Vector3 GroundNormal { get; set; }
 	
-	[Property]
 	// ReSharper disable once MemberCanBePrivate.Global
-	public float AirInfluence { get; set; } = 0.3f;
-
-	[Property]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float Friction { get; set; } = 6.0f;
-
-	[Property]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float SkinWidth { get; set; } = 0.1f;
-
-	private BoxCollider FloorCollider { get; set; }
-	private float GroundRayDistance { get; set; } = 2f;
-
-	private float _speed;
-	private Vector2 _movementInput;
-	private Rotation _rotation;
-	private float _originalCapsuleHeight;
-	private Vector3 _originalBoxSize;
-
-	private static readonly Logger Log = new("WalkController");
-
+	[Property, Category( "State" )]
+	public float CurrentSpeed { get; private set; }
+	
+	// Ground object tracking for moving platforms
+	private GameObject GroundObject { get; set; }
+	public Collider GroundCollider { get; private set; }
+	
+	private Vector3 _mins;
+	private Vector3 _maxs;
+	private Vector3 _wishVelocity;
+	private Rotation _eyeRotation;
+	private int _stuckTries;
+	
+	// Velocity clipping planes for collision
+	private const int MaxClipPlanes = 3;
+	private Vector3[] _clipPlanes = new Vector3[MaxClipPlanes];
+	private int _clipPlaneCount;
+	private Vector3 _originalVelocity;
+	private Vector3 _bumpVelocity;
+	
+	private static readonly Logger Log = new( "WalkController" );
+	
 	protected override void OnStart()
 	{
 		base.OnStart();
-
+		
 		if ( IsProxy )
 		{
 			return;
 		}
 		
-		// TODO: Allow other collider types for floor detection
-		if ( !Colliders.OfType<BoxCollider>().Any() )
-		{
-			Log.Warning( $"{this} currently only supports a BoxCollider for feet!" );
-		}
-
-		FloorCollider = Colliders.FirstOrDefault( x => x is BoxCollider ) as BoxCollider;
-
-		var capsuleCollider = Colliders.FirstOrDefault( x => x is CapsuleCollider ) as CapsuleCollider;
-		if ( capsuleCollider.IsValid() )
-		{
-			_originalCapsuleHeight = capsuleCollider.End.z;
-		}
-
-		var boxCollider = Colliders.FirstOrDefault( x => x is BoxCollider ) as BoxCollider;
-		if ( boxCollider.IsValid() )
-		{
-			_originalBoxSize = boxCollider.Scale;
-		}
+		// Set up hull size
+		_mins = new Vector3( -BodyGirth / 2f, -BodyGirth / 2f, 0 );
+		_maxs = new Vector3( BodyGirth / 2f, BodyGirth / 2f, BodyHeight );
+		_originalCapsuleHeight = BodyHeight;
+		CurrentSpeed = WalkSpeed;
 	}
-
-	protected override void OnUpdate()
-	{
-		if ( !IsProxy )
-		{
-			if ( Debug )
-			{
-				DrawDebugInfo();
-			}
-
-			HandleCoyoteTime();
-			HandleJumpInput();
-			HandleCrouchInput();
-
-			_speed = Speed;
-
-			// Apply basic inputs
-			var input = Input.AnalogMove;
-			_rotation = Rotation.FromYaw( EyeAngles.yaw );
-			_movementInput = new Vector2( input.x, input.y );
-
-			// Store grounded state for next frame
-			_wasGroundedLastFrame = IsGrounded;
-		}
-
-		base.OnUpdate();
-	}
-
+	
 	protected override void OnFixedUpdate()
 	{
-		if ( IsProxy )
-		{
-			return;
-		}
-
-		// Process movement input
-		if ( _movementInput.Length > 0.1f )
-		{
-			_movementInput = _rotation * _movementInput;
-			_movementInput = _movementInput.Normal;
-		}
-
-		HandleCrouchTransition();
 		base.OnFixedUpdate();
+		
+		if ( Debug )
+		{
+			DrawDebugInfo();
+		}
 	}
-
-	protected override void CheckGround()
+	
+	protected override void BuildWishVelocity()
 	{
-		if ( !FloorCollider.IsValid() )
+		_wishVelocity = Vector3.Zero;
+		var input = Input.AnalogMove;
+		
+		if ( input.Length < 0.01f )
 		{
 			return;
 		}
-
-		var start = FloorCollider.WorldPosition + Vector3.Up * SkinWidth;
-		var end = start - Vector3.Up * GroundRayDistance;
-		var bbox = BBox.FromPositionAndSize( FloorCollider.Center, FloorCollider.Scale );
-
-		var trace = Scene.Trace.Box( bbox, start, end )
-			.WithoutTags( "player", "nocollide" )
-			.UseHitPosition()
-			.Run();
-
-		var angle = Vector3.GetAngle( trace.Normal, Vector3.Up );
-		var wasGrounded = IsGrounded;
-    
-		// More reliable grounding check with distance tolerance
-		IsGrounded = trace.Hit && angle <= SlopeAngle && trace.Distance <= GroundRayDistance - SkinWidth;
-		if ( IsGrounded )
-		{
-			//GroundStick();
-		}
-
-		ResetJumpFlagOnLanding( wasGrounded );
-
-		// Apply grounding force more selectively
-		if ( IsGrounded && _movementInput.LengthSquared > 0.01f && angle > 5f && angle <= SlopeAngle )
-		{
-			var groundingForce = Vector3.Down * Rigidbody.Mass * 2f; // Increased force
-			Rigidbody.ApplyForce( groundingForce );
-		}
+		
+		_eyeRotation = Rotation.FromYaw( EyeAngles.yaw );
+		_wishVelocity = _eyeRotation * new Vector3( input.x, input.y, 0 );
+		_wishVelocity = _wishVelocity.Normal;
+		_wishVelocity *= CurrentSpeed;
 	}
-
-	protected override void CalculateVelocity()
-	{
-		// If we aren't moving and grounded, apply friction.
-		if ( _movementInput.LengthSquared < 0.01f && IsGrounded )
-		{
-			ApplyFriction();
-		}
-		else // Else, assign our movement input as our WishVelocity.
-		{
-			var control = IsGrounded ? 1.0f : AirControl;
-			var desiredHorizontal = _movementInput * _speed * control;
-			WishVelocity = new Vector3( desiredHorizontal.x, desiredHorizontal.y, 0 );
-		}
-	}
-
-	/// <summary>
-	/// Applies friction to horizontal movement when the player is grounded and not actively moving.
-	/// This gradually slows down the player until they come to a stop, while preserving vertical velocity.
-	/// </summary>
-	private void ApplyFriction()
-	{
-		var horizontalVelocity = new Vector3( Velocity.x, Velocity.y, 0 );
-		var speed = horizontalVelocity.Length;
-
-		if ( speed < 0.1f )
-		{
-			// Stop the rigidbody.
-			var stopForce = -horizontalVelocity * Rigidbody.Mass / Scene.FixedDelta;
-			Rigidbody.ApplyForce( stopForce );
-			WishVelocity = Vector3.Zero;
-			return;
-		}
-
-		// Apply friction force directly to rigidbody
-		var frictionForce = -horizontalVelocity.Normal * Friction * Rigidbody.Mass;
-		Rigidbody.ApplyForce( frictionForce );
-		WishVelocity = Vector3.Zero;
-	}
-
+	
 	protected override void Move()
 	{
-		if ( !Rigidbody.IsValid() )
+		// Try to unstuck first
+		if ( TryUnstuck() )
 		{
 			return;
 		}
-
-		// Handle jumping
-		ExecuteJump();
-		if ( WishJump ) // If we just jumped, don't process movement this frame
+		
+		// Update grounded state
+		CategorizePosition();
+		
+		// Inherit velocity from moving platforms
+		if ( IsGrounded && GroundObject.IsValid() )
 		{
-			return;
+			var rigidbody = GroundObject.GetComponent<Rigidbody>();
+			
+			if ( rigidbody.IsValid() )
+			{
+				// Add platform's velocity to ours
+				var platformVelocity = rigidbody.Velocity;
+				Velocity += platformVelocity;
+			}
 		}
-
-		var horizontalTarget = new Vector3( WishVelocity.x, WishVelocity.y, 0 );
-		var horizontalCurrent = new Vector3( Rigidbody.Velocity.x, Rigidbody.Velocity.y, 0 );
-
+		
+		// Clear Z velocity if on ground (prevents bhop speed gain)
 		if ( IsGrounded )
 		{
-			ApplyHorizontalMovement( horizontalTarget, horizontalCurrent );
-
-			if ( horizontalTarget.Length > 0.1f && CanStepUp( horizontalTarget * Scene.FixedDelta ) )
+			Velocity = Velocity.WithZ( 0 );
+		}
+		
+		// Handle inputs
+		HandleCoyoteTime();
+		HandleJumpInput();
+		HandleCrouchInput();
+		
+		// Execute jump
+		var jumped = Jump();
+		
+		if ( !jumped )
+		{
+			// Apply movement
+			if ( IsGrounded )
 			{
-				StepUp( horizontalTarget * Scene.FixedDelta );
+				GroundMove();
 			}
+			else
+			{
+				AirMove();
+			}
+		}
+		
+		// Apply gravity
+		if ( !IsGrounded )
+		{
+			Velocity += Scene.PhysicsWorld.Gravity * Scene.FixedDelta;
+		}
+		
+		// Execute the actual movement with collision
+		if ( IsGrounded )
+		{
+			PerformMove( true );
 		}
 		else
 		{
-			// Air control - preserve momentum but allow direction changes
-			var desiredChange = horizontalTarget - horizontalCurrent;
-			var airTarget = horizontalCurrent + desiredChange * AirInfluence;
-    
-			ApplyHorizontalMovement( airTarget, horizontalCurrent, forceMultiplier: AirInfluence );
+			PerformMove( false );
 		}
-	}
-
-	/// <summary>
-	/// Applies horizontal movement forces.
-	/// </summary>
-	private void ApplyHorizontalMovement( Vector3 targetHorizontal, Vector3 currentHorizontal, float forceMultiplier = 1.0f, float maxAccelMultiplier = 1.0f )
-	{
-		var horizontalDiff = targetHorizontal - currentHorizontal;
-		var maxAccel = AccelerationRate * Scene.FixedDelta * maxAccelMultiplier;
-
-		if ( horizontalDiff.Length > maxAccel )
+		
+		// Subtract platform velocity after movement (so we don't keep accelerating)
+		if ( IsGrounded && GroundObject.IsValid() )
 		{
-			horizontalDiff = horizontalDiff.Normal * maxAccel;
+			var rigidbody = GroundObject.GetComponent<Rigidbody>();
+			
+			if ( rigidbody.IsValid() )
+			{
+				Velocity -= rigidbody.Velocity;
+			}
 		}
-
-		if ( horizontalDiff.Length <= 0.01f )
-		{
-			return;
-		}
-
-		Rigidbody.ApplyForce( horizontalDiff * Rigidbody.Mass * forceMultiplier / Scene.FixedDelta );
-
-		// Clamp max horizontal velocity
-		var newVel = new Vector3( Rigidbody.Velocity.x, Rigidbody.Velocity.y, 0 );
-		if ( !(newVel.Length > Speed) )
-		{
-			return;
-		}
-
-		newVel = newVel.Normal * Speed;
-		Rigidbody.Velocity = new Vector3( newVel.x, newVel.y, Rigidbody.Velocity.z );
+		
+		// Re-categorize after movement
+		CategorizePosition();
+		
+		// Store wish velocity for animations
+		WishVelocity = _wishVelocity;
 	}
 	
-	private void StepUp( Vector3 moveDelta )
+	private BBox GetBBox()
 	{
-		if ( StepHeight <= 0 || !IsGrounded || moveDelta.Length < 0.01f )
+		return new BBox( _mins, _maxs );
+	}
+	
+	private SceneTrace BuildTrace( Vector3 from, Vector3 to )
+	{
+		return Scene.Trace.Box( GetBBox(), from, to )
+			.IgnoreGameObjectHierarchy( GameObject )
+			.WithoutTags( "player", "nocollide" );
+	}
+	
+	/// <summary>
+	/// Perform the actual movement with stepping and collision
+	/// </summary>
+	private void PerformMove( bool useStep )
+	{
+		if ( Velocity.Length < 0.001f )
 		{
+			Velocity = Vector3.Zero;
+			
 			return;
 		}
-
-		// Add a small upward offset to avoid starting embedded
-		var start = WorldPosition + Vector3.Up * 0.1f;
-		var upOffset = Vector3.Up * StepHeight;
-
-		// 1. Raise up to step height
-		var upward = Scene.Trace
-			.Sweep( Rigidbody, WorldTransform.WithPosition( start ), WorldTransform.WithPosition( start + upOffset ) )
-			.WithoutTags( "player", "nocollide" )
-			.Run();
-
-		var stepOrigin = upward.Hit ? upward.EndPosition : start + upOffset;
-
-		// 2. Try moving forward from raised position
-		var forward = Scene.Trace
-			.Sweep( Rigidbody, WorldTransform.WithPosition( stepOrigin ), WorldTransform.WithPosition( stepOrigin + moveDelta ) )
-			.WithoutTags( "player", "nocollide" )
-			.Run();
-
-		var forwardEnd = forward.Hit ? forward.EndPosition : stepOrigin + moveDelta;
-
-		// 3. Drop down to ground from the new position
-		var downward = Scene.Trace
-			.Sweep( Rigidbody, WorldTransform.WithPosition( forwardEnd ), WorldTransform.WithPosition( forwardEnd - Vector3.Up * (StepHeight + 2f) ) )
-			.WithoutTags( "player", "nocollide" )
-			.Run();
-
-		// Didn't hit anything.
-		if ( !downward.Hit )
+		
+		if ( useStep )
 		{
-			return;
+			TryMoveWithStep( Scene.FixedDelta );
 		}
-
-		// 4. Apply final safe step position
-		WorldPosition = downward.EndPosition;
-		if ( Debug )
+		else
 		{
-			Log.Info( $"Stepped!" );
+			TryMove( Scene.FixedDelta );
 		}
 	}
-
-	private bool CanStepUp( Vector3 moveDelta )
+	
+	/// <summary>
+	/// Try to move with collision detection and sliding
+	/// </summary>
+	private float TryMove( float timeDelta )
 	{
-		if ( moveDelta.Length < 0.01f )
+		var timeLeft = timeDelta;
+		float travelFraction = 0;
+		_clipPlaneCount = 0;
+		_originalVelocity = Velocity;
+		_bumpVelocity = Velocity;
+		
+		for ( var bump = 0; bump < MaxClipPlanes; bump++ )
 		{
-			return false;
+			if ( Velocity.Length.AlmostEqual( 0.0f ) ) break;
+			var end = WorldPosition + Velocity * timeLeft;
+			var trace = BuildTrace( WorldPosition, end ).Run();
+			travelFraction += trace.Fraction;
+			timeLeft -= timeLeft * trace.Fraction;
+			
+			if ( !trace.Hit )
+			{
+				WorldPosition = trace.EndPosition;
+				break;
+			}
+			
+			if ( trace.Fraction > 0 )
+			{
+				WorldPosition = trace.EndPosition;
+				StartBump( Velocity );
+			}
+			
+			var standable = trace.Normal.Angle( Vector3.Up ) <= GroundAngle;
+			
+			if ( !TryAddPlane( trace.Normal, standable ? 0 : Bounciness ) )
+			{
+				break;
+			}
 		}
-
-		var forward = moveDelta.Normal * 8f; // short probe ahead
-
-		// 1. Check if there's a wall at foot level
-		var footStart = WorldPosition;
-		var footEnd = footStart + forward;
-
-		var footTrace = Scene.Trace.Ray( footStart, footEnd )
-			.WithoutTags( "player", "nocollide" )
-			.Run();
-
-		if ( !footTrace.Hit )
+		
+		return travelFraction;
+	}
+	
+	/// <summary>
+	/// Try to move with step up capability
+	/// </summary>
+	private void TryMoveWithStep( float timeDelta )
+	{
+		var startPosition = WorldPosition;
+		var startVelocity = Velocity;
+		
+		// Do a regular move
+		var fraction = TryMove( timeDelta );
+		
+		// If we barely moved, keep the regular move result
+		if ( fraction <= 0.01f )
 		{
-			// no wall at foot level, so no step needed
+			return;
+		}
+		
+		// Save the result of the regular move
+		var regularPosition = WorldPosition;
+		var regularVelocity = Velocity;
+		
+		// Try stepping - use separate variables to not pollute the regular move
+		var stepPosition = startPosition;
+		var stepVelocity = startVelocity;
+		
+		// Step up (simple trace)
+		var upTrace = BuildTrace( stepPosition, stepPosition + Vector3.Up * StepHeight ).Run();
+		stepPosition = upTrace.EndPosition;
+		
+		// Use original velocity (not clipped) for step delta calculation
+		var moveDelta = stepVelocity.WithZ( 0 ) * timeDelta;
+		var deltaLen = moveDelta.Length;
+		
+		// If it's really low, we're probably moving straight up or down
+		if ( deltaLen < 0.001f )
+		{
+			// Keep regular move
+			return;
+		}
+		
+		var moveBack = Vector3.Zero;
+		
+		if ( deltaLen < 0.5f )
+		{
+			var newDelta = moveDelta.Normal * 0.5f;
+			moveBack = moveDelta - newDelta;
+			moveDelta = newDelta;
+		}
+		
+		// Move forward
+		var forwardTrace = BuildTrace( stepPosition, stepPosition + moveDelta ).Run();
+		stepPosition = forwardTrace.EndPosition;
+		
+		// Step down
+		var downTrace = BuildTrace( stepPosition, stepPosition + Vector3.Down * StepHeight ).Run();
+		stepPosition = downTrace.EndPosition;
+		
+		// Verify we landed on something valid
+		if ( !downTrace.Hit )
+		{
+			// Keep regular move
+			return;
+		}
+		
+		// Check if surface is too steep
+		if ( downTrace.Normal.Angle( Vector3.Up ) > GroundAngle )
+		{
+			// Keep regular move
+			return;
+		}
+		
+		// Check if we actually moved further with the step
+		var regularDist = startPosition.Distance( regularPosition.WithZ( startPosition.z ) );
+		var stepDist = startPosition.Distance( stepPosition.WithZ( startPosition.z ) );
+		
+		if ( regularDist > stepDist )
+		{
+			// Regular move was better, keep it (already set)
+			return;
+		}
+		
+		// Apply move back if needed
+		if ( !moveBack.IsNearZeroLength )
+		{
+			var moveBackTrace = BuildTrace( stepPosition, stepPosition + moveBack ).Run();
+			stepPosition = moveBackTrace.EndPosition;
+		}
+		
+		// Step move was better, use it
+		WorldPosition = stepPosition;
+		Velocity = stepVelocity;
+	}
+	
+	/// <summary>
+	/// Start a new bump iteration
+	/// </summary>
+	private void StartBump( Vector3 velocity )
+	{
+		_bumpVelocity = velocity;
+		_clipPlaneCount = 0;
+	}
+	
+	/// <summary>
+	/// Try to add a collision plane and clip velocity
+	/// </summary>
+	private bool TryAddPlane( Vector3 normal, float bounce )
+	{
+		if ( _clipPlaneCount >= MaxClipPlanes )
+		{
 			return false;
 		}
 		
-		var surfaceAngle = Vector3.GetAngle( footTrace.Normal, Vector3.Up );
-		if ( surfaceAngle <= SlopeAngle )
+		_clipPlanes[_clipPlaneCount++] = normal;
+		
+		// First plane - apply bounce
+		if ( _clipPlaneCount == 1 )
 		{
+			_bumpVelocity = ClipVelocity( _originalVelocity, normal, 1.0f + bounce );
+			_originalVelocity = _bumpVelocity;
+			Velocity = _bumpVelocity;
+			
+			return true;
+		}
+		
+		// Try to clip to all planes
+		if ( TryClipVelocity() )
+		{
+			// Hit floor and wall - slide along the intersection
+			if ( _clipPlaneCount == 2 )
+			{
+				var dir = Vector3.Cross( _clipPlanes[0], _clipPlanes[1] ).Normal;
+				var d = dir.Dot( Velocity );
+				Velocity = dir * d;
+			}
+			else
+			{
+				Velocity = Vector3.Zero;
+				
+				return false;
+			}
+		}
+		
+		// Check if we're moving backwards
+		if ( Velocity.Dot( _originalVelocity ) <= 0 )
+		{
+			Velocity = Vector3.Zero;
 			return false;
 		}
-
-		// 2. Check if at step height it's clear
-		var stepStart = WorldPosition + Vector3.Up * StepHeight;
-		var stepEnd = stepStart + forward;
-
-		var stepTrace = Scene.Trace.Ray( stepStart, stepEnd )
-			.WithoutTags( "player", "nocollide" )
-			.Run();
-
-		return !stepTrace.Hit;
+		
+		return true;
 	}
-
+	
+	/// <summary>
+	/// Try to clip velocity to all planes
+	/// </summary>
+	private bool TryClipVelocity()
+	{
+		for ( var i = 0; i < _clipPlaneCount; i++ )
+		{
+			Velocity = ClipVelocity( _originalVelocity, _clipPlanes[i] );
+			
+			if ( IsMovingTowardsAnyPlane( i ) )
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	/// <summary>
+	/// Check if velocity is moving towards any plane (except skip index)
+	/// </summary>
+	private bool IsMovingTowardsAnyPlane( int skipIndex )
+	{
+		for ( var j = 0; j < _clipPlaneCount; j++ )
+		{
+			if ( j == skipIndex )
+			{
+				continue;
+			}
+			
+			if ( Velocity.Dot( _clipPlanes[j] ) < 0 )
+			{
+				return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	/// <summary>
+	/// Check if we're stuck and try to escape
+	/// </summary>
+	private bool TryUnstuck()
+	{
+		var result = BuildTrace( WorldPosition, WorldPosition ).Run();
+		
+		// Not stuck
+		if ( !result.StartedSolid )
+		{
+			_stuckTries = 0;
+			
+			return false;
+		}
+		
+		const int attemptsPerTick = 20;
+		
+		for ( var i = 0; i < attemptsPerTick; i++ )
+		{
+			var pos = WorldPosition + Vector3.Random.Normal * (((float)_stuckTries) / 2.0f);
+			
+			// First try the up direction for moving platforms
+			if ( i == 0 )
+			{
+				pos = WorldPosition + Vector3.Up * 2;
+			}
+			
+			result = BuildTrace( pos, pos ).Run();
+			
+			if ( !result.StartedSolid )
+			{
+				WorldPosition = pos;
+				
+				return false;
+			}
+		}
+		
+		_stuckTries++;
+		
+		return true;
+	}
+	
+	/// <summary>
+	/// Check if we're on ground and update ground normal
+	/// </summary>
+	private void CategorizePosition()
+	{
+		var wasGrounded = IsGrounded;
+		var vBumpOrigin = WorldPosition; // Save the position we're checking from
+		var point = vBumpOrigin + Vector3.Down * 2f;
+		
+		// We're flying upwards too fast, never land on ground
+		if ( !IsGrounded && Velocity.z > 40.0f )
+		{
+			ClearGround();
+			return;
+		}
+		
+		// Trace down for ground detection
+		point.z -= wasGrounded ? StepHeight : 0.1f;
+		var trace = BuildTrace( vBumpOrigin, point ).Run();
+		
+		// Not on ground if we didn't hit or surface is too steep
+		if ( !trace.Hit || Vector3.GetAngle( Vector3.Up, trace.Normal ) > GroundAngle )
+		{
+			ClearGround();
+			return;
+		}
+		
+		// We are on ground
+		IsGrounded = true;
+		GroundNormal = trace.Normal;
+		GroundObject = trace.GameObject;
+		GroundCollider = trace.Shape?.Collider;
+		
+		// Snap to ground if we moved and hit
+		if ( wasGrounded && !trace.StartedSolid && trace.Fraction > 0.0f && trace.Fraction < 1.0f )
+		{
+			WorldPosition = trace.EndPosition;
+		}
+		
+		ResetJumpFlagOnLanding( wasGrounded );
+	}
+	
+	/// <summary>
+	/// Clear ground state
+	/// </summary>
+	private void ClearGround()
+	{
+		IsGrounded = false;
+		GroundNormal = Vector3.Up;
+		GroundObject = null;
+		GroundCollider = null;
+	}
+	
+	/// <summary>
+	/// Ground movement with friction and acceleration
+	/// </summary>
+	private void GroundMove()
+	{
+		ApplyFriction( GroundFriction );
+		
+		if ( !(_wishVelocity.Length > 0.01f) )
+		{
+			return;
+		}
+		
+		var wishDir = _wishVelocity.Normal;
+		wishDir -= GroundNormal * Vector3.Dot( wishDir, GroundNormal );
+		wishDir = wishDir.Normal;
+		Accelerate( wishDir, CurrentSpeed, Acceleration );
+	}
+	
+	/// <summary>
+	/// Air movement with reduced acceleration
+	/// </summary>
+	private void AirMove()
+	{
+		if ( _wishVelocity.Length < 0.01f )
+		{
+			return;
+		}
+		
+		var wishDir = _wishVelocity.Normal;
+		var wishSpeed = _wishVelocity.Length;
+		Accelerate( wishDir, wishSpeed, AirAcceleration );
+	}
+	
+	/// <summary>
+	/// Apply friction to horizontal velocity
+	/// </summary>
+	private void ApplyFriction( float friction )
+	{
+		var speed = Velocity.Length;
+		
+		if ( speed < 0.1f )
+		{
+			return;
+		}
+		
+		// Calculate drop amount
+		var control = speed < StopSpeed ? StopSpeed : speed;
+		var drop = control * friction * Scene.FixedDelta;
+		
+		// Scale velocity
+		var newSpeed = MathF.Max( speed - drop, 0f );
+		
+		if ( Math.Abs( newSpeed - speed ) > 0.001f )
+		{
+			newSpeed /= speed;
+			Velocity *= newSpeed;
+		}
+		
+		// Full stop if very slow
+		if ( Velocity.Length < 1f )
+		{
+			Velocity = Vector3.Zero;
+		}
+	}
+	
+	/// <summary>
+	/// Accelerate the player toward wish velocity (Quake-style)
+	/// </summary>
+	private void Accelerate( Vector3 wishDir, float wishSpeed, float acceleration )
+	{
+		var currentSpeed = Vector3.Dot( Velocity, wishDir );
+		var addSpeed = wishSpeed - currentSpeed;
+		
+		if ( addSpeed <= 0 )
+		{
+			return;
+		}
+		
+		var accelSpeed = acceleration * Scene.FixedDelta * wishSpeed;
+		accelSpeed = MathF.Min( accelSpeed, addSpeed );
+		Velocity += wishDir * accelSpeed;
+	}
+	
+	/// <summary>
+	/// By default, we assume you're using Terry, so we update animations using <see cref="CitizenAnimationHelper"/>. <br/>
+	/// If you're not, you might want to update this method to run with your own model.
+	/// </summary>
 	protected override void UpdateAnimations()
 	{
+		// Calling base for in case we use it in the future.
 		base.UpdateAnimations();
 		
 		if ( !AnimationHelper.IsValid() )
 		{
 			return;
 		}
-
+		
 		AnimationHelper.IsGrounded = IsGrounded;
 		AnimationHelper.DuckLevel = _currentCrouchFactor;
 		AnimationHelper.WithLook( EyeAngles.Forward * 100 );
 		AnimationHelper.WithVelocity( Velocity );
-		AnimationHelper.WithWishVelocity( WishVelocity );
+		AnimationHelper.WithWishVelocity( IsProxy ? Velocity : _wishVelocity );
+	}
+	
+	/// <summary>
+	/// Clip velocity against a plane
+	/// </summary>
+	private static Vector3 ClipVelocity( Vector3 vel, Vector3 normal, float overbounce = 1.0f )
+	{
+		var backoff = Vector3.Dot( vel, normal ) * overbounce;
+		var output = vel - normal * backoff;
+		
+		// Extra adjustment to prevent moving into the plane
+		var adjust = Vector3.Dot( output, normal );
+		
+		if ( adjust < 0.0f )
+		{
+			output -= normal * adjust;
+		}
+		
+		return output;
 	}
 }

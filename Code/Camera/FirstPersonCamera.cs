@@ -23,10 +23,14 @@ public class FirstPersonCamera : CameraController
 	[Property]
 	public GameObject ModelParent { get; set; }
 	
+	[Property]
+	public Rigidbody Rigidbody { get; set; }
+	
 	private Rotation _currentRotation = Rotation.Identity;
 	private float _currentPitch;
 	private Vector3 _smoothedPosition;
 	private bool _initialized;
+	private Vector3 _previousPlayerPosition;
 	
 	protected override void OnStart()
 	{
@@ -53,9 +57,27 @@ public class FirstPersonCamera : CameraController
 		if ( !_initialized )
 		{
 			_smoothedPosition = target;
+			_previousPlayerPosition = GameObject.WorldPosition;
 			_initialized = true;
 		}
 		
+		// Detect vertical snaps
+		// If the player moved vertically more than could be explained by normal velocity
+		// in one frame, it was a snap - follow it instantly on the vertical axis
+		var playerDelta = GameObject.WorldPosition - _previousPlayerPosition;
+		
+		var expectedVertical = Rigidbody.IsValid() ? Rigidbody.Velocity.z * Time.Delta : 0f;
+		var snapThreshold = 1.0f;
+		
+		if ( MathF.Abs( playerDelta.z - expectedVertical ) > snapThreshold )
+		{
+			// Vertical snap detected - apply it directly to the smoothed position
+			_smoothedPosition.z += playerDelta.z;
+		}
+		
+		_previousPlayerPosition = GameObject.WorldPosition;
+		
+		// Normal lerp for horizontal (and non-snapped vertical)
 		_smoothedPosition = Vector3.Lerp( _smoothedPosition, target, PositionSmoothness * Time.Delta );
 		Camera.WorldPosition = _smoothedPosition;
 	}

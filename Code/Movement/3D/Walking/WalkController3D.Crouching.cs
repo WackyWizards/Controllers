@@ -1,145 +1,32 @@
-﻿using System;
-using System.Linq;
-using Sandbox;
+﻿using Sandbox;
 
 namespace Controllers.Movement;
 
-// ReSharper disable once ClassNeverInstantiated.Global
-public partial class WalkController3D : MovementController3D
+public partial class WalkController3D
 {
-	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
 	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
 	public bool CanCrouch { get; set; } = true;
-
-	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float CrouchHeight { get; set; } = 0.6f;
-
-	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float CrouchTransitionSpeed { get; set; } = 7.0f;
-
-	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" ), ReadOnly, Sync]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public bool IsCrouched { get; set; } = false;
-
-	[Property, Group( "Inputs" ), InputAction]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public string CrouchInput { get; set; } = "duck";
-
-	private bool WishCrouch { get; set; }
 	
-	/// <summary>
-	/// 0 = standing, 1 = fully crouched
-	/// </summary>
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
+	public float CrouchHeight { get; set; } = 36f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" )]
+	public float CrouchSpeed { get; set; } = 100f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( "CanCrouch", Title = "Crouching" ), ReadOnly, Sync]
+	public bool IsCrouched { get; set; }
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Group( "Inputs" ), InputAction]
+	public string CrouchInput { get; set; } = "duck";
+	
+	private bool _wishCrouch;
 	private float _currentCrouchFactor;
-
-	private void Crouch()
-	{
-		if ( !CanCrouch || IsCrouched )
-		{
-			return;
-		}
-
-		SetCrouchState( true );
-	}
-
-	private void Uncrouch()
-	{
-		if ( !CanCrouch || !IsCrouched )
-		{
-			return;
-		}
-
-		if ( CanStandUp() )
-		{
-			SetCrouchState( false );
-		}
-	}
-
-	private bool CanStandUp()
-	{
-		var collider = Colliders.FirstOrDefault( x => x is CapsuleCollider ) as CapsuleCollider;
-		if ( !collider.IsValid() )
-		{
-			return false;
-		}
-
-		var start = WorldPosition;
-		var heightDifference = _originalCapsuleHeight - collider.End.z;
-		var end = start + Vector3.Up * heightDifference;
-		var capsule = new Capsule( collider.Start, new Vector3( 0, 0, _originalCapsuleHeight ), collider.Radius );
-
-		var trace = Scene.Trace.Capsule( capsule, start, end )
-			.WithoutTags( "player", "nocollide" )
-			.Run();
-
-		return !trace.Hit;
-	}
-
-	private bool CanUncrouch()
-	{
-		return CanStandUp();
-	}
-
-	private void SetCrouchState( bool crouched )
-	{
-		if ( !CanCrouch )
-		{
-			return;
-		}
-
-		IsCrouched = crouched;
-		
-		// Set crouch factor - the lerping will happen in HandleCrouch
-		_currentCrouchFactor = crouched ? 1.0f : 0.0f;
-		
-		// Only check for obstacles when trying to stand up
-		if ( !crouched && !CanStandUp() )
-		{
-			return;
-		}
-	}
-
-	private void HandleCrouch()
-	{
-		// Smooth transition of crouch factor
-		var targetFactor = IsCrouched ? 1.0f : 0.0f;
-		var delta = CrouchTransitionSpeed * Scene.FixedDelta;
-		_currentCrouchFactor = MathX.Lerp( _currentCrouchFactor, targetFactor, delta );
-
-		// Snap to final value when close enough
-		if ( MathF.Abs( _currentCrouchFactor - targetFactor ) < 0.01f )
-		{
-			_currentCrouchFactor = targetFactor;
-		}
-
-		var bottomCollider = Colliders.FirstOrDefault( x => x is BoxCollider ) as BoxCollider;
-		if ( !bottomCollider.IsValid() )
-		{
-			return;
-		}
-
-		const float crouchFactor = 0.7f;
-		var scaleFactor = MathX.Lerp( 1.0f, crouchFactor, _currentCrouchFactor );
-
-		// Update box collider scale
-		bottomCollider.Scale = new Vector3(
-			_originalBoxSize.x,
-			_originalBoxSize.y,
-			_originalBoxSize.z * scaleFactor
-		);
-
-		// Adjust the capsule collider
-		var topCollider = Colliders.FirstOrDefault( x => x is CapsuleCollider ) as CapsuleCollider;
-		if ( !topCollider.IsValid() )
-		{
-			return;
-		}
-
-		var targetHeight = MathX.Lerp( _originalCapsuleHeight, CrouchHeight, _currentCrouchFactor );
-		topCollider.End = new Vector3( 0, 0, targetHeight );
-	}
+	private float _originalCapsuleHeight;
 	
 	private void HandleCrouchInput()
 	{
@@ -147,49 +34,66 @@ public partial class WalkController3D : MovementController3D
 		{
 			return;
 		}
-
+		
 		if ( Input.Pressed( CrouchInput ) )
 		{
-			WishCrouch = true;
+			_wishCrouch = true;
 		}
 		else if ( Input.Released( CrouchInput ) )
 		{
-			WishCrouch = false;
+			_wishCrouch = false;
 		}
-
-		ProcessCrouchState();
+		
+		if ( _wishCrouch && !IsCrouched )
+		{
+			TryCrouch();
+		}
+		else if ( !_wishCrouch && IsCrouched )
+		{
+			TryUncrouch();
+		}
+		
+		UpdateCrouchVisuals();
 	}
-
-	private void ProcessCrouchState()
+	
+	private void TryCrouch()
 	{
-		if ( WishCrouch )
-		{
-			Crouch();
-		}
-		else if ( CanUncrouch() && !WishCrouch )
-		{
-			Uncrouch();
-		}
+		IsCrouched = true;
+		CurrentSpeed = CrouchSpeed;
+		BodyHeight = CrouchHeight;
+		_maxs = _maxs.WithZ( CrouchHeight );
 	}
-
-	private void HandleCrouchTransition()
+	
+	private void TryUncrouch()
 	{
-		// Handle crouching
-		if ( CanCrouch && WishCrouch != IsCrouched )
-		{
-			HandleCrouch();
-		}
-
-		// Smooth crouch factor transition
-		if ( !IsCrouched )
+		if ( !CanStandUp() )
 		{
 			return;
 		}
-
-		var delta = CrouchTransitionSpeed * Scene.FixedDelta;
-		if ( _currentCrouchFactor != 0.0f )
-		{
-			_currentCrouchFactor = MathX.Lerp( _currentCrouchFactor, 0.0f, delta );
-		}
+		
+		IsCrouched = false;
+		CurrentSpeed = WalkSpeed;
+		BodyHeight = _originalCapsuleHeight;
+		_maxs = _maxs.WithZ( _originalCapsuleHeight );
+	}
+	
+	private bool CanStandUp()
+	{
+		var standMins = _mins;
+		var standMaxs = _maxs.WithZ( _originalCapsuleHeight );
+		var standBBox = new BBox( standMins, standMaxs );
+		
+		// Check if there's room to stand
+		var tr = Scene.Trace.Box( standBBox, WorldPosition, WorldPosition )
+			.IgnoreGameObjectHierarchy( GameObject )
+			.WithoutTags( "player", "nocollide" ).Run();
+		
+		return !tr.Hit;
+	}
+	
+	private void UpdateCrouchVisuals()
+	{
+		var target = IsCrouched ? 1f : 0f;
+		_currentCrouchFactor = _currentCrouchFactor.LerpTo( target, Time.Delta * 10f );
 	}
 }

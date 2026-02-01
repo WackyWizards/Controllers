@@ -2,91 +2,99 @@
 
 namespace Controllers.Movement;
 
-// ReSharper disable once ClassNeverInstantiated.Global
-public partial class WalkController3D : MovementController3D
+public partial class WalkController3D
 {
-	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
 	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
 	public bool CanJump { get; set; } = true;
-
-	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
-	// ReSharper disable once MemberCanBePrivate.Global
-	public float JumpForce { get; set; } = 250.0f;
 	
-	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
 	// ReSharper disable once MemberCanBePrivate.Global
-	public float CoyoteTime { get; set; } = 0.15f;
+	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
+	public float JumpPower { get; set; } = 300f;
 	
-	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
 	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
+	public float CoyoteTimeAmount { get; set; } = 0.15f;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
 	public float JumpBufferTime { get; set; } = 0.2f;
 	
-	[Property, Group( "Inputs" ), InputAction]
 	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Group( "Inputs" ), InputAction]
 	public string JumpInput { get; set; } = "Jump";
 	
-	private bool WishJump { get; set; }
-	
+	private bool _wishJump;
 	private TimeUntil _coyoteTime;
 	private TimeUntil _jumpBuffer;
 	private bool _wasGroundedLastFrame;
 	private bool _hasJumpedSinceGrounded;
+	private TimeSince _timeSinceLanded; // Anti-bhop: track time since landing
 	
 	private void HandleCoyoteTime()
 	{
-		// Just left ground, start coyote time
 		if ( _wasGroundedLastFrame && !IsGrounded )
 		{
-			_coyoteTime = CoyoteTime;
+			_coyoteTime = CoyoteTimeAmount;
 		}
+		
+		_wasGroundedLastFrame = IsGrounded;
 	}
-
+	
 	private void HandleJumpInput()
 	{
 		if ( !CanJump )
 		{
 			return;
 		}
-
-		// Jumping inputs with buffering
+		
 		if ( Input.Pressed( JumpInput ) )
 		{
 			_jumpBuffer = JumpBufferTime;
 		}
-
-		// Check if we can jump (either grounded or in coyote time) and have a buffered jump
-		if ( _jumpBuffer > 0 && (_coyoteTime > 0 || IsGrounded) && !_hasJumpedSinceGrounded )
+		
+		// Anti-bhop: require at least 0.1 seconds on ground before allowing another jump
+		const float landingGracePeriod = 0.1f;
+		var hasBeenGroundedLongEnough = IsGrounded && _timeSinceLanded >= landingGracePeriod;
+		
+		// Can jump if: (grounded long enough OR coyote time active) AND haven't jumped since landing
+		var canJumpNow = (hasBeenGroundedLongEnough || _coyoteTime > 0) && !_hasJumpedSinceGrounded;
+		
+		if ( _jumpBuffer > 0 && canJumpNow )
 		{
-			WishJump = true;
-			_jumpBuffer = 0; // Consume the buffer
-			_coyoteTime = 0; // Consume coyote time
+			_wishJump = true;
+			_jumpBuffer = 0;
+			_coyoteTime = 0;
 		}
 		else if ( Input.Released( JumpInput ) )
 		{
-			WishJump = false;
+			_wishJump = false;
 		}
 	}
-
-	private void ExecuteJump()
+	
+	private bool Jump()
 	{
-		if ( !WishJump )
+		if ( !_wishJump )
+		{
+			return false;
+		}
+		
+		Velocity = Velocity.WithZ( JumpPower );
+		_wishJump = false;
+		_hasJumpedSinceGrounded = true;
+		IsGrounded = false;
+		
+		return true;
+	}
+	
+	private void ResetJumpFlagOnLanding( bool wasGrounded )
+	{
+		if ( wasGrounded || !IsGrounded )
 		{
 			return;
 		}
-
-		var jumpImpulse = Vector3.Up * JumpForce * Rigidbody.Mass;
-		Rigidbody.ApplyImpulse( jumpImpulse );
 		
-		WishJump = false;
-		_hasJumpedSinceGrounded = true;
-	}
-
-	private void ResetJumpFlagOnLanding( bool wasGrounded )
-	{
-		// Reset jump flag when landing
-		if ( !wasGrounded && IsGrounded )
-		{
-			_hasJumpedSinceGrounded = false;
-		}
+		_hasJumpedSinceGrounded = false;
+		_timeSinceLanded = 0; // Start the grace period timer
 	}
 }
