@@ -6,7 +6,7 @@ namespace Controllers.Camera;
 public class FirstPersonCamera : CameraController
 {
 	[Property]
-	private Vector3 Offset { get; set; } = new( -5, 5, 70 );
+	private Vector3 Offset { get; set; } = new( 0, 1, 70 );
 	
 	[Property]
 	private float MinPitchAngle { get; set; } = -89f;
