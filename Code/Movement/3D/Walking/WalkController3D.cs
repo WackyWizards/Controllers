@@ -104,7 +104,7 @@ public partial class WalkController3D : MovementController3D
 	{
 		base.OnFixedUpdate();
 		
-		if ( Debug )
+		if ( Debug && !IsProxy )
 		{
 			DrawDebugInfo();
 		}
