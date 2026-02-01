@@ -63,7 +63,7 @@ public partial class WalkController3D : MovementController3D
 	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "State" )]
-	public float CurrentSpeed { get; private set; }
+	public float CurrentSpeed { get; set; }
 	
 	// Ground object tracking for moving platforms
 	private GameObject GroundObject { get; set; }
@@ -149,11 +149,19 @@ public partial class WalkController3D : MovementController3D
 		if ( IsGrounded && GroundObject.IsValid() )
 		{
 			var rigidbody = GroundObject.GetComponent<Rigidbody>();
+			var collider = GroundObject.GetComponent<Collider>();
 			
 			if ( rigidbody.IsValid() )
 			{
-				// Add platform's velocity to ours
+				// Add platform's rigidbody's velocity to ours
 				var platformVelocity = rigidbody.Velocity;
+				Velocity += platformVelocity;
+			}
+			
+			if ( collider.IsValid() )
+			{
+				// Add platform's collider's velocity to ours
+				var platformVelocity = collider.SurfaceVelocity;
 				Velocity += platformVelocity;
 			}
 		}
@@ -201,7 +209,7 @@ public partial class WalkController3D : MovementController3D
 			PerformMove( false );
 		}
 		
-		// Subtract platform velocity after movement (so we don't keep accelerating)
+		// Subtract platform rigidbody velocity after movement (so we don't keep accelerating)
 		if ( IsGrounded && GroundObject.IsValid() )
 		{
 			var rigidbody = GroundObject.GetComponent<Rigidbody>();
