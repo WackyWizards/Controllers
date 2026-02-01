@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Sandbox;
 using Sandbox.Citizen;
 using Sandbox.Diagnostics;
@@ -13,6 +14,9 @@ public partial class WalkController3D : MovementController3D
 	[Property, Category( "Components" ), RequireComponent]
 	public CitizenAnimationHelper AnimationHelper { get; set; }
 	
+	[Property, Category( "Components" )]
+	public List<Collider> Colliders { get; set; } = [];
+
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "Movement" )]
 	public float WalkSpeed { get; set; } = 190f;
@@ -68,6 +72,9 @@ public partial class WalkController3D : MovementController3D
 	// Ground object tracking for moving platforms
 	private GameObject GroundObject { get; set; }
 	public Collider GroundCollider { get; private set; }
+	
+	private Vector3 _lastGroundPosition;
+	private bool _hasLastGroundPosition;
 	
 	private Vector3 _mins;
 	private Vector3 _maxs;
@@ -145,28 +152,35 @@ public partial class WalkController3D : MovementController3D
 		// Update grounded state
 		CategorizePosition();
 		
-		// Inherit velocity from moving platforms
+		// Track the platform before we do anything
+		var previousGroundObject = GroundObject;
+		var hadLastGroundPosition = _hasLastGroundPosition;
+		var lastGroundPos = _lastGroundPosition;
+		
+		// Update the last ground position for this frame
+		if ( IsGrounded && GroundObject.IsValid() )
+		{
+			_lastGroundPosition = GroundObject.WorldPosition;
+			_hasLastGroundPosition = true;
+		}
+		
+		// Inherit velocity from ground
 		if ( IsGrounded && GroundObject.IsValid() )
 		{
 			var rigidbody = GroundObject.GetComponent<Rigidbody>();
-			var collider = GroundObject.GetComponent<Collider>();
-			
 			if ( rigidbody.IsValid() )
 			{
-				// Add platform's rigidbody's velocity to ours
-				var platformVelocity = rigidbody.Velocity;
-				Velocity += platformVelocity;
+				Velocity += rigidbody.Velocity;
 			}
 			
+			var collider = GroundObject.GetComponent<Collider>();
 			if ( collider.IsValid() )
 			{
-				// Add platform's collider's velocity to ours
-				var platformVelocity = collider.SurfaceVelocity;
-				Velocity += platformVelocity;
+				Velocity += collider.SurfaceVelocity;
 			}
 		}
 		
-		// Clear Z velocity if on ground (prevents bhop speed gain)
+		// Clear Z velocity if on ground
 		if ( IsGrounded )
 		{
 			Velocity = Velocity.WithZ( 0 );
@@ -209,22 +223,40 @@ public partial class WalkController3D : MovementController3D
 			PerformMove( false );
 		}
 		
-		// Subtract platform rigidbody velocity after movement (so we don't keep accelerating)
-		if ( IsGrounded && GroundObject.IsValid() )
+		// Apply platform displacement after collision movement
+		if ( previousGroundObject.IsValid() && hadLastGroundPosition && IsGrounded && GroundObject == previousGroundObject )
 		{
-			var rigidbody = GroundObject.GetComponent<Rigidbody>();
+			var currentGroundPos = GroundObject.WorldPosition;
+			var platformDelta = currentGroundPos - lastGroundPos;
 			
-			if ( rigidbody.IsValid() )
-			{
-				Velocity -= rigidbody.Velocity;
-			}
+			// Move player with platform (after our collision movement is done)
+			WorldPosition += platformDelta;
 		}
 		
 		// Re-categorize after movement
 		CategorizePosition();
 		
+		// Update last ground position for next frame
+		UpdateLastGroundPosition();
+		
 		// Store wish velocity for animations
 		WishVelocity = _wishVelocity;
+	}
+
+	/// <summary>
+	/// Update the tracked ground position after movement
+	/// </summary>
+	private void UpdateLastGroundPosition()
+	{
+		if ( IsGrounded && GroundObject.IsValid() )
+		{
+			_lastGroundPosition = GroundObject.WorldPosition;
+			_hasLastGroundPosition = true;
+		}
+		else
+		{
+			_hasLastGroundPosition = false;
+		}
 	}
 	
 	/// <summary>
@@ -281,7 +313,11 @@ public partial class WalkController3D : MovementController3D
 		
 		for ( var bump = 0; bump < MaxClipPlanes; bump++ )
 		{
-			if ( Velocity.Length.AlmostEqual( 0.0f ) ) break;
+			if ( Velocity.Length.AlmostEqual( 0.0f ) )
+			{
+				break;
+			}
+			
 			var end = WorldPosition + Velocity * timeLeft;
 			var trace = BuildTrace( WorldPosition, end ).Run();
 			travelFraction += trace.Fraction;
