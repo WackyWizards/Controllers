@@ -13,6 +13,13 @@ public partial class WalkController3D
 	public float JumpPower { get; set; } = 300f;
 	
 	// ReSharper disable once MemberCanBePrivate.Global
+	/// <summary>
+	/// Delay between allowing the player to jump again after landing. <br/>
+	/// </summary>
+	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
+	public float LandingGracePeriod { get; set; } = 0.1f;
+
+	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
 	public float CoyoteTimeAmount { get; set; } = 0.15f;
 	
@@ -29,7 +36,7 @@ public partial class WalkController3D
 	private TimeUntil _jumpBuffer;
 	private bool _wasGroundedLastFrame;
 	private bool _hasJumpedSinceGrounded;
-	private TimeSince _timeSinceLanded; // Anti-bhop: track time since landing
+	private TimeSince _timeSinceLanded;
 	
 	private void HandleCoyoteTime()
 	{
@@ -53,9 +60,7 @@ public partial class WalkController3D
 			_jumpBuffer = JumpBufferTime;
 		}
 		
-		// Anti-bhop: require at least 0.1 seconds on ground before allowing another jump
-		const float landingGracePeriod = 0.1f;
-		var hasBeenGroundedLongEnough = IsGrounded && _timeSinceLanded >= landingGracePeriod;
+		var hasBeenGroundedLongEnough = IsGrounded && _timeSinceLanded >= LandingGracePeriod;
 		
 		// Can jump if: (grounded long enough OR coyote time active) AND haven't jumped since landing
 		var canJumpNow = (hasBeenGroundedLongEnough || _coyoteTime > 0) && !_hasJumpedSinceGrounded;
