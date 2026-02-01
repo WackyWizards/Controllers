@@ -4,11 +4,7 @@ using Controllers.Camera;
 
 namespace Controllers.Movement;
 
-/// <summary>
-/// Contains the base for handling movement controls.
-/// Inherently, this class doesn't do much by itself, just defines useful things for different controller types.
-/// </summary>
-public abstract class MovementController3D : Component
+public abstract class MovementController3D : Component, IScenePhysicsEvents
 {
 	[Property, Category( "Components" ), RequireComponent]
 	public CameraController CameraController { get; set; }
@@ -16,11 +12,9 @@ public abstract class MovementController3D : Component
 	[Sync]
 	public Vector3 WishVelocity { get; set; }
 	
-	// ReSharper disable once MemberCanBeProtected.Global
 	[Sync]
 	public Angles EyeAngles { get; set; }
 	
-	// ReSharper disable once MemberCanBeProtected.Global
 	[Sync]
 	public Vector3 Velocity { get; set; }
 	
@@ -36,7 +30,7 @@ public abstract class MovementController3D : Component
 		UpdateAnimations();
 	}
 	
-	protected override void OnFixedUpdate()
+	void IScenePhysicsEvents.PrePhysicsStep()
 	{
 		if ( IsProxy )
 		{
@@ -44,18 +38,39 @@ public abstract class MovementController3D : Component
 		}
 		
 		BuildWishVelocity();
+		PreMove();
+	}
+	
+	void IScenePhysicsEvents.PostPhysicsStep()
+	{
+		if ( IsProxy )
+		{
+			return;
+		}
+		
 		Move();
+		PostMove();
 	}
 	
 	/// <summary>
-	/// Build the wish velocity based on player input. Called before Move().
+	/// Build the wish velocity based on player input.
 	/// </summary>
 	protected virtual void BuildWishVelocity() { }
 	
 	/// <summary>
-	/// Execute movement. Called after BuildWishVelocity().
+	/// Called before physics simulation (good for input gathering)
+	/// </summary>
+	protected virtual void PreMove() { }
+	
+	/// <summary>
+	/// Execute movement after physics simulation
 	/// </summary>
 	protected virtual void Move() { }
+	
+	/// <summary>
+	/// Called after movement is complete
+	/// </summary>
+	protected virtual void PostMove() { }
 	
 	/// <summary>
 	/// Update character animations.

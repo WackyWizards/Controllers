@@ -16,7 +16,7 @@ public partial class WalkController3D : MovementController3D
 	
 	[Property, Category( "Components" )]
 	public List<Collider> Colliders { get; set; } = [];
-
+	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "Movement" )]
 	public float WalkSpeed { get; set; } = 190f;
@@ -72,9 +72,6 @@ public partial class WalkController3D : MovementController3D
 	// Ground object tracking for moving platforms
 	private GameObject GroundObject { get; set; }
 	public Collider GroundCollider { get; private set; }
-	
-	private Vector3 _lastGroundPosition;
-	private bool _hasLastGroundPosition;
 	
 	private Vector3 _mins;
 	private Vector3 _maxs;
@@ -152,38 +149,36 @@ public partial class WalkController3D : MovementController3D
 		// Update grounded state
 		CategorizePosition();
 		
-		// Track the platform before we do anything
+		var wasGrounded = IsGrounded;
 		var previousGroundObject = GroundObject;
-		var hadLastGroundPosition = _hasLastGroundPosition;
-		var lastGroundPos = _lastGroundPosition;
+		var platformDisplacement = Vector3.Zero;
+		var platformVelocity = Vector3.Zero;
 		
-		// Update the last ground position for this frame
+		// Calculate platform displacement
 		if ( IsGrounded && GroundObject.IsValid() )
 		{
-			_lastGroundPosition = GroundObject.WorldPosition;
-			_hasLastGroundPosition = true;
-		}
-		
-		// Inherit velocity from ground
-		if ( IsGrounded && GroundObject.IsValid() )
-		{
-			var rigidbody = GroundObject.GetComponent<Rigidbody>();
-			if ( rigidbody.IsValid() )
-			{
-				Velocity += rigidbody.Velocity;
-			}
-			
 			var collider = GroundObject.GetComponent<Collider>();
+			
 			if ( collider.IsValid() )
 			{
-				Velocity += collider.SurfaceVelocity;
+				var groundVel = collider.GetVelocityAtPoint( WorldPosition );
+				platformDisplacement = groundVel * Scene.FixedDelta;
+				platformVelocity = groundVel;
+				
+				// Surface velocity
+				if ( collider.SurfaceVelocity.Length > 0.001f )
+				{
+					var surfaceVel = collider.SurfaceVelocity;
+					platformDisplacement += surfaceVel * Scene.FixedDelta;
+					platformVelocity += surfaceVel;
+				}
 			}
 		}
 		
-		// Clear Z velocity if on ground
+		// Add platform horizontal velocity to our velocity for movement calculations
 		if ( IsGrounded )
 		{
-			Velocity = Velocity.WithZ( 0 );
+			Velocity = Velocity.WithZ( 0 ) + platformVelocity.WithZ( 0 );
 		}
 		
 		// Handle inputs
@@ -213,50 +208,19 @@ public partial class WalkController3D : MovementController3D
 			Velocity += Scene.PhysicsWorld.Gravity * Scene.FixedDelta;
 		}
 		
-		// Execute the actual movement with collision
-		if ( IsGrounded )
-		{
-			PerformMove( true );
-		}
-		else
-		{
-			PerformMove( false );
-		}
-		
-		// Apply platform displacement after collision movement
-		if ( previousGroundObject.IsValid() && hadLastGroundPosition && IsGrounded && GroundObject == previousGroundObject )
-		{
-			var currentGroundPos = GroundObject.WorldPosition;
-			var platformDelta = currentGroundPos - lastGroundPos;
-			
-			// Move player with platform (after our collision movement is done)
-			WorldPosition += platformDelta;
-		}
-		
-		// Re-categorize after movement
+		PerformMove( IsGrounded );
 		CategorizePosition();
 		
-		// Update last ground position for next frame
-		UpdateLastGroundPosition();
+		// Apply platform displacement
+		if ( wasGrounded && IsGrounded && previousGroundObject == GroundObject )
+		{
+			if ( !platformDisplacement.IsNearZeroLength )
+			{
+				WorldPosition += platformDisplacement;
+			}
+		}
 		
-		// Store wish velocity for animations
 		WishVelocity = _wishVelocity;
-	}
-
-	/// <summary>
-	/// Update the tracked ground position after movement
-	/// </summary>
-	private void UpdateLastGroundPosition()
-	{
-		if ( IsGrounded && GroundObject.IsValid() )
-		{
-			_lastGroundPosition = GroundObject.WorldPosition;
-			_hasLastGroundPosition = true;
-		}
-		else
-		{
-			_hasLastGroundPosition = false;
-		}
 	}
 	
 	/// <summary>
@@ -273,6 +237,7 @@ public partial class WalkController3D : MovementController3D
 	private SceneTrace BuildTrace( Vector3 from, Vector3 to )
 	{
 		var bbox = GetBBox();
+		
 		return Scene.Trace.Box( bbox, from, to )
 			.IgnoreGameObjectHierarchy( GameObject )
 			.WithoutTags( "player", "nocollide" );
@@ -326,6 +291,7 @@ public partial class WalkController3D : MovementController3D
 			if ( !trace.Hit )
 			{
 				WorldPosition = trace.EndPosition;
+				
 				break;
 			}
 			
@@ -662,6 +628,7 @@ public partial class WalkController3D : MovementController3D
 		}
 		
 		var collider = GroundObject.GetComponent<Collider>();
+		
 		if ( !collider.IsValid() )
 		{
 			return GroundFriction;
