@@ -97,6 +97,8 @@ public partial class WalkController3D : MovementController3D
 		_mins = new Vector3( -BodyGirth / 2f, -BodyGirth / 2f, 0 );
 		_maxs = new Vector3( BodyGirth / 2f, BodyGirth / 2f, BodyHeight );
 		_originalCapsuleHeight = BodyHeight;
+		
+		// Set variables
 		CurrentSpeed = WalkSpeed;
 	}
 	
@@ -110,6 +112,9 @@ public partial class WalkController3D : MovementController3D
 		}
 	}
 	
+	/// <summary>
+	/// Build the wish velocity based on player input. Called before Move().
+	/// </summary>
 	protected override void BuildWishVelocity()
 	{
 		_wishVelocity = Vector3.Zero;
@@ -126,6 +131,9 @@ public partial class WalkController3D : MovementController3D
 		_wishVelocity *= CurrentSpeed;
 	}
 	
+	/// <summary>
+	/// Execute movement. Called after BuildWishVelocity().
+	/// </summary>
 	protected override void Move()
 	{
 		// Try to unstuck first
@@ -211,14 +219,21 @@ public partial class WalkController3D : MovementController3D
 		WishVelocity = _wishVelocity;
 	}
 	
+	/// <summary>
+	/// Get a new bounding box (BBox) from the <see cref="_mins"/> and <see cref="_maxs"/>
+	/// </summary>
 	private BBox GetBBox()
 	{
 		return new BBox( _mins, _maxs );
 	}
 	
+	/// <summary>
+	/// Build a trace for the player using a bounding box.
+	/// </summary>
 	private SceneTrace BuildTrace( Vector3 from, Vector3 to )
 	{
-		return Scene.Trace.Box( GetBBox(), from, to )
+		var bbox = GetBBox();
+		return Scene.Trace.Box( bbox, from, to )
 			.IgnoreGameObjectHierarchy( GameObject )
 			.WithoutTags( "player", "nocollide" );
 	}
