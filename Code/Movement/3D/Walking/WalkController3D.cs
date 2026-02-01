@@ -23,11 +23,11 @@ public partial class WalkController3D : MovementController3D
 	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "Movement" )]
-	public float Acceleration { get; set; } = 10f;
+	public float Acceleration { get; set; } = 8f;
 	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "Movement" )]
-	public float AirAcceleration { get; set; } = 10f;
+	public float AirAcceleration { get; set; } = 1f;
 	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "Movement" )]
