@@ -1,5 +1,6 @@
 ﻿using Sandbox;
 using System;
+using Controllers.Movement;
 
 namespace Controllers.Camera;
 
@@ -26,6 +27,17 @@ public class FirstPersonCamera : CameraController
 	[Property]
 	public Rigidbody Rigidbody { get; set; }
 	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( nameof(UseCrouchOffset), Title = "Crouching" )]
+	public bool UseCrouchOffset { get; set; } = true;
+	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, FeatureEnabled( nameof(UseCrouchOffset), Title = "Crouching" )]
+	public float CrouchCameraOffset { get; set; } = 34f;
+	
+	[Property, FeatureEnabled( nameof(UseCrouchOffset), Title = "Crouching" )]
+	public WalkController3D Movement { get; set; }
+	
 	private Rotation _currentRotation = Rotation.Identity;
 	private float _currentPitch;
 	private Vector3 _smoothedPosition;
@@ -39,6 +51,7 @@ public class FirstPersonCamera : CameraController
 			foreach ( var model in ModelParent.GetAllObjects( true ) )
 			{
 				var renderer = model.GetComponent<ModelRenderer>();
+				
 				if ( !renderer.IsValid() )
 				{
 					continue;
@@ -53,7 +66,14 @@ public class FirstPersonCamera : CameraController
 	
 	protected override void UpdateCameraPosition()
 	{
-		var target = GameObject.WorldPosition + Offset;
+		var crouchOffset = 0f;
+		
+		if ( UseCrouchOffset && Movement.IsValid() )
+		{
+			crouchOffset = Movement.CrouchFactor * CrouchCameraOffset;
+		}
+		
+		var target = GameObject.WorldPosition + Offset - Vector3.Up * crouchOffset;
 		
 		if ( !_initialized )
 		{
@@ -62,23 +82,15 @@ public class FirstPersonCamera : CameraController
 			_initialized = true;
 		}
 		
-		// Detect vertical snaps
-		// If the player moved vertically more than could be explained by normal velocity
-		// in one frame, it was a snap - follow it instantly on the vertical axis
 		var playerDelta = GameObject.WorldPosition - _previousPlayerPosition;
-		
 		var expectedVertical = Rigidbody.IsValid() ? Rigidbody.Velocity.z * Time.Delta : 0f;
-		var snapThreshold = 1.0f;
 		
-		if ( MathF.Abs( playerDelta.z - expectedVertical ) > snapThreshold )
+		if ( MathF.Abs( playerDelta.z - expectedVertical ) > 1.0f )
 		{
-			// Vertical snap detected - apply it directly to the smoothed position
 			_smoothedPosition.z += playerDelta.z;
 		}
 		
 		_previousPlayerPosition = GameObject.WorldPosition;
-		
-		// Normal lerp for horizontal (and non-snapped vertical)
 		_smoothedPosition = Vector3.Lerp( _smoothedPosition, target, PositionSmoothness * Time.Delta );
 		Camera.WorldPosition = _smoothedPosition;
 	}
