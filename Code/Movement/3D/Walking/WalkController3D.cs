@@ -113,9 +113,9 @@ public partial class WalkController3D : MovementController3D
 		CurrentSpeed = WalkSpeed;
 	}
 	
-	protected override void OnFixedUpdate()
+	protected override void OnUpdate()
 	{
-		base.OnFixedUpdate();
+		base.OnUpdate();
 		
 		if ( Debug && !IsProxy )
 		{
