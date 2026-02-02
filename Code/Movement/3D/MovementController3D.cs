@@ -12,9 +12,11 @@ public abstract class MovementController3D : Component, IScenePhysicsEvents
 	[Sync]
 	public Vector3 WishVelocity { get; set; }
 	
+	// ReSharper disable once MemberCanBePrivate.Global
 	[Sync]
 	public Angles EyeAngles { get; set; }
 	
+	// ReSharper disable once MemberCanBePrivate.Global
 	[Sync]
 	public Vector3 Velocity { get; set; }
 	
