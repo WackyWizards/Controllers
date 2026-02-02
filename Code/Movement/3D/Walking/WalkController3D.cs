@@ -11,11 +11,11 @@ namespace Controllers.Movement;
 /// </summary>
 public partial class WalkController3D : MovementController3D
 {
-	[Property, Category( "Components" ), RequireComponent]
+	[Property, Category( "Components" )]
 	public CitizenAnimationHelper AnimationHelper { get; set; }
 	
 	// ReSharper disable once MemberCanBePrivate.Global
-	[Property, Category( "Components" ), RequireComponent]
+	[Property, Category( "Components" )]
 	public Rigidbody Rigidbody { get; set; }
 	
 	[Property, Category( "Components" )]

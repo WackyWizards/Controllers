@@ -6,7 +6,7 @@ namespace Controllers.Movement;
 
 public abstract class MovementController3D : Component, IScenePhysicsEvents
 {
-	[Property, Category( "Components" ), RequireComponent]
+	[Property, Category( "Components" )]
 	public CameraController CameraController { get; set; }
 	
 	[Sync]
