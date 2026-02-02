@@ -24,8 +24,9 @@ public partial class WalkController3D
 	[Property, Group( "Inputs" ), InputAction]
 	public string CrouchInput { get; set; } = "duck";
 	
+	public float CrouchFactor { get; private set; }
+	
 	private bool _wishCrouch;
-	private float _currentCrouchFactor;
 	private float _originalCapsuleHeight;
 	
 	private void HandleCrouchInput()
@@ -94,6 +95,6 @@ public partial class WalkController3D
 	private void UpdateCrouchVisuals()
 	{
 		var target = IsCrouched ? 1f : 0f;
-		_currentCrouchFactor = _currentCrouchFactor.LerpTo( target, Time.Delta * 10f );
+		CrouchFactor = CrouchFactor.LerpTo( target, Time.Delta * 10f );
 	}
 }

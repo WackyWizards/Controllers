@@ -763,7 +763,7 @@ public partial class WalkController3D : MovementController3D
 		}
 		
 		AnimationHelper.IsGrounded = IsGrounded;
-		AnimationHelper.DuckLevel = _currentCrouchFactor;
+		AnimationHelper.DuckLevel = CrouchFactor;
 		AnimationHelper.WithLook( EyeAngles.Forward * 100 );
 		AnimationHelper.WithVelocity( Velocity );
 		AnimationHelper.WithWishVelocity( IsProxy ? Velocity : _wishVelocity );
