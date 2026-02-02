@@ -13,12 +13,13 @@ public abstract class MovementController3D : Component, IScenePhysicsEvents
 	public Vector3 WishVelocity { get; set; }
 	
 	// ReSharper disable once MemberCanBePrivate.Global
+	// ReSharper disable once MemberCanBeProtected.Global
+	/// <summary>
+	/// By default, if this controller has a <see cref="CameraController"/> assigned, uses it's EyeAngles. <br/>
+	/// If you don't have one, you may set this to your own value.
+	/// </summary>
 	[Sync]
 	public Angles EyeAngles { get; set; }
-	
-	// ReSharper disable once MemberCanBePrivate.Global
-	[Sync]
-	public Vector3 Velocity { get; set; }
 	
 	private static readonly Logger Log = new( "MovementController" );
 	

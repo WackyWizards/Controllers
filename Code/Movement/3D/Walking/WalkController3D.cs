@@ -77,6 +77,10 @@ public partial class WalkController3D : MovementController3D
 	private GameObject GroundObject { get; set; }
 	public Collider GroundCollider { get; private set; }
 	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Sync]
+	public Vector3 Velocity { get; set; }
+	
 	private Vector3 _mins;
 	private Vector3 _maxs;
 	private Vector3 _wishVelocity;
