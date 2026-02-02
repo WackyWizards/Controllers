@@ -14,6 +14,10 @@ public partial class WalkController3D : MovementController3D
 	[Property, Category( "Components" ), RequireComponent]
 	public CitizenAnimationHelper AnimationHelper { get; set; }
 	
+	// ReSharper disable once MemberCanBePrivate.Global
+	[Property, Category( "Components" ), RequireComponent]
+	public Rigidbody Rigidbody { get; set; }
+	
 	[Property, Category( "Components" )]
 	public List<Collider> Colliders { get; set; } = [];
 	
@@ -86,6 +90,9 @@ public partial class WalkController3D : MovementController3D
 	private Vector3 _originalVelocity;
 	private Vector3 _bumpVelocity;
 	
+	// Track base velocity to subtract collision-inherited velocity
+	private Vector3 _baseVelocity;
+	
 	private static readonly Logger Log = new( "WalkController" );
 	
 	protected override void OnStart()
@@ -135,6 +142,19 @@ public partial class WalkController3D : MovementController3D
 		_wishVelocity *= CurrentSpeed;
 	}
 	
+	protected override void PreMove()
+	{
+		// Reset rigidbody velocity at the start of our movement frame
+		// This prevents inherited velocity from previous physics interactions
+		if ( Rigidbody.IsValid() && !IsProxy )
+		{
+			Rigidbody.Velocity = Vector3.Zero;
+			Rigidbody.AngularVelocity = Vector3.Zero;
+		}
+		
+		base.PreMove();
+	}
+	
 	/// <summary>
 	/// Execute movement. Called after BuildWishVelocity().
 	/// </summary>
@@ -152,7 +172,6 @@ public partial class WalkController3D : MovementController3D
 		var wasGrounded = IsGrounded;
 		var previousGroundObject = GroundObject;
 		var platformDisplacement = Vector3.Zero;
-		var platformVelocity = Vector3.Zero;
 		
 		// Calculate platform displacement
 		if ( IsGrounded && GroundObject.IsValid() )
@@ -163,23 +182,18 @@ public partial class WalkController3D : MovementController3D
 			{
 				var groundVel = collider.GetVelocityAtPoint( WorldPosition );
 				platformDisplacement = groundVel * Scene.FixedDelta;
-				platformVelocity = groundVel;
 				
 				// Surface velocity
 				if ( collider.SurfaceVelocity.Length > 0.001f )
 				{
 					var surfaceVel = collider.SurfaceVelocity;
 					platformDisplacement += surfaceVel * Scene.FixedDelta;
-					platformVelocity += surfaceVel;
 				}
 			}
 		}
 		
-		// Add platform horizontal velocity to our velocity for movement calculations
-		if ( IsGrounded )
-		{
-			Velocity = Velocity.WithZ( 0 ) + platformVelocity.WithZ( 0 );
-		}
+		// Store base velocity before movement
+		_baseVelocity = Velocity;
 		
 		// Handle inputs
 		HandleCoyoteTime();
@@ -208,11 +222,19 @@ public partial class WalkController3D : MovementController3D
 			Velocity += Scene.PhysicsWorld.Gravity * Scene.FixedDelta;
 		}
 		
+		// Update base velocity after acceleration/friction but before collision
+		_baseVelocity = Velocity;
+		
 		PerformMove( IsGrounded );
+		
+		// After collision, clamp velocity to not exceed what we had before collision
+		// This prevents inheriting velocity from moving walls/objects
+		ClampInheritedVelocity();
+		
 		CategorizePosition();
 		
-		// Apply platform displacement
-		if ( wasGrounded && IsGrounded && previousGroundObject == GroundObject )
+		// Apply platform displacement ONLY if we stayed on the same platform
+		if ( wasGrounded && IsGrounded && previousGroundObject == GroundObject && previousGroundObject.IsValid() )
 		{
 			if ( !platformDisplacement.IsNearZeroLength )
 			{
@@ -221,6 +243,30 @@ public partial class WalkController3D : MovementController3D
 		}
 		
 		WishVelocity = _wishVelocity;
+	}
+	
+	/// <summary>
+	/// Prevent velocity from being increased by collisions with moving objects
+	/// </summary>
+	private void ClampInheritedVelocity()
+	{
+		// Get the speed we had before collision
+		var baseSpeed = _baseVelocity.Length;
+		var currentSpeed = Velocity.Length;
+		
+		// If collision increased our speed, clamp it back down
+		if ( currentSpeed > baseSpeed + 0.1f ) // Small epsilon for floating point errors
+		{
+			// Keep the direction from collision but limit the speed
+			if ( currentSpeed > 0.01f )
+			{
+				Velocity = Velocity.Normal * baseSpeed;
+			}
+			else
+			{
+				Velocity = _baseVelocity;
+			}
+		}
 	}
 	
 	/// <summary>
