@@ -18,6 +18,16 @@ public partial class WalkController3D : MovementController3D
 	[Property, Category( "Components" )]
 	public Rigidbody Rigidbody { get; set; }
 	
+	// ReSharper disable once MemberCanBePrivate.Global
+	/// <summary>
+	/// Reference list of colliders used by this controller. <br/>
+	/// If a <see cref="Rigidbody"/> is provided, the Rigidbody will automatically use all colliders 
+	/// that are children of its GameObject - this list is just for convenience/reference. <br/>
+	/// If no Rigidbody is provided, the controller falls back to using <see cref="BodyGirth"/> and 
+	/// <see cref="BodyHeight"/> to create a bounding box for traces. <br/>
+	/// <br/>
+	/// <b>Optional:</b> Leave empty to use a single collider instead of separate body/feet colliders.
+	/// </summary>
 	[Property, Category( "Components" )]
 	public List<Collider> Colliders { get; set; } = [];
 	
@@ -46,10 +56,16 @@ public partial class WalkController3D : MovementController3D
 	public float GroundAngle { get; set; } = 45f;
 	
 	// ReSharper disable once MemberCanBePrivate.Global
+	/// <summary>
+	/// If we have no set <see cref="Rigidbody"/>, this is used to define the width of our box trace.
+	/// </summary>
 	[Property, Category( "Movement" )]
 	public float BodyGirth { get; set; } = 32f;
 	
 	// ReSharper disable once MemberCanBePrivate.Global
+	/// <summary>
+	/// If we have no set <see cref="Rigidbody"/>, this will define the height of our box trace.
+	/// </summary>
 	[Property, Category( "Movement" )]
 	public float BodyHeight { get; set; } = 64f;
 	
@@ -80,6 +96,48 @@ public partial class WalkController3D : MovementController3D
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Sync]
 	public Vector3 Velocity { get; set; }
+	
+	/// <summary>
+	/// Finds the first CapsuleCollider in the <see cref="Colliders"/> list. <br/>
+	/// This is typically the main body collision shape for the character. <br/>
+	/// If the Colliders list is empty, returns the first CapsuleCollider found in children.
+	/// </summary>
+	public Collider BodyCollider
+	{
+		get
+		{
+			var collider = Colliders.Find( x => x is CapsuleCollider );
+			
+			if ( collider.IsValid() )
+			{
+				return collider;
+			}
+			
+			// Fallback: find any CapsuleCollider in children
+			return GetComponentInChildren<CapsuleCollider>();
+		}
+	}
+	
+	/// <summary>
+	/// Finds the first BoxCollider in the <see cref="Colliders"/> list. <br/>
+	/// This is typically used for ground detection and stepping. <br/>
+	/// If the Colliders list is empty, returns the first BoxCollider found in children.
+	/// </summary>
+	public Collider FeetCollider
+	{
+		get
+		{
+			var collider = Colliders.Find( x => x is BoxCollider );
+			
+			if ( collider.IsValid() )
+			{
+				return collider;
+			}
+			
+			// Fallback: find any BoxCollider in children
+			return GetComponentInChildren<BoxCollider>();
+		}
+	}
 	
 	private Vector3 _mins;
 	private Vector3 _maxs;
@@ -282,12 +340,33 @@ public partial class WalkController3D : MovementController3D
 	}
 	
 	/// <summary>
-	/// Build a trace for the player using a bounding box.
+	/// Build a trace for the player using the actual colliders. <br/>
+	/// <br/>
+	/// <b>How it works:</b> <br/>
+	/// - If a Rigidbody is present, uses Scene.Trace.Body() which automatically sweeps ALL colliders 
+	///   that are children of the Rigidbody's GameObject (the Rigidbody maintains an internal list 
+	///   of colliders that register with it automatically). <br/>
+	/// - If no Rigidbody is present, falls back to a simple box trace using BodyGirth and BodyHeight. <br/>
+	/// <br/>
+	/// <b>Important:</b> The <see cref="Colliders"/> list is just a reference - the Rigidbody uses 
+	/// its own internal mechanism to find and use colliders in its hierarchy.
 	/// </summary>
 	private SceneTrace BuildTrace( Vector3 from, Vector3 to )
 	{
-		var bbox = GetBBox();
+		// Use the rigidbody if available, which will sweep all attached colliders
+		if ( Rigidbody.IsValid() && Rigidbody.PhysicsBody.IsValid() )
+		{
+			// This will trace with ALL colliders that are children of the Rigidbody's GameObject
+			// The Rigidbody automatically discovers and uses these colliders
+			return Scene.Trace.Body( Rigidbody, to )
+				.FromTo( from, to )
+				.IgnoreGameObjectHierarchy( GameObject )
+				.WithoutTags( "player", "nocollide" );
+		}
 		
+		// Fallback to box trace if no rigidbody
+		// This uses the manually defined BodyGirth and BodyHeight values
+		var bbox = GetBBox();
 		return Scene.Trace.Box( bbox, from, to )
 			.IgnoreGameObjectHierarchy( GameObject )
 			.WithoutTags( "player", "nocollide" );

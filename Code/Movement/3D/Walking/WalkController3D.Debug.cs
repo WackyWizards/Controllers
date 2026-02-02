@@ -1,4 +1,5 @@
-﻿using Sandbox;
+﻿using System.Linq;
+using Sandbox;
 
 namespace Controllers.Movement;
 
@@ -21,10 +22,52 @@ public partial class WalkController3D
 		}
 		
 		// Draw collision bbox
-		using ( Gizmo.Scope( "bbox", Transform.World ) )
+		if ( !Rigidbody.IsValid() )
 		{
-			Gizmo.Draw.Color = IsGrounded ? Color.Green : Color.Red;
-			Gizmo.Draw.LineBBox( GetBBox() );
+			using ( Gizmo.Scope( "bbox", Transform.World ) )
+			{
+				Gizmo.Draw.Color = IsGrounded ? Color.Green : Color.Red;
+				Gizmo.Draw.LineBBox( GetBBox() );
+			}
+		}
+		else
+		{
+			// Draw each collider in the list
+			using ( Gizmo.Scope( "colliders", Transform.World ) )
+			{
+				Gizmo.Draw.Color = IsGrounded ? Color.Green : Color.Red;
+				
+				// Get colliders to draw (use list if populated, otherwise find all colliders)
+				var collidersToDraw = Colliders.Count > 0
+					? Colliders
+					: GetComponentsInChildren<Collider>().ToList();
+				
+				foreach ( var collider in collidersToDraw )
+				{
+					if ( !collider.IsValid() )
+					{
+						continue;
+					}
+					
+					// Draw based on collider type
+					if ( collider is CapsuleCollider capsuleCollider )
+					{
+						var capsule = new Capsule( capsuleCollider.Start, capsuleCollider.End, capsuleCollider.Radius );
+						Gizmo.Draw.LineCapsule( capsule );
+					}
+					else if ( collider is BoxCollider box )
+					{
+						using ( Gizmo.Scope( "box", box.LocalTransform ) )
+						{
+							Gizmo.Draw.LineBBox( box.LocalBounds );
+						}
+					}
+					else if ( collider is SphereCollider sphere )
+					{
+						Gizmo.Draw.LineSphere( sphere.Center, sphere.Radius );
+					}
+				}
+			}
 		}
 	}
 }
