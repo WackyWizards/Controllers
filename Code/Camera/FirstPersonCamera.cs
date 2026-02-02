@@ -6,6 +6,12 @@ namespace Controllers.Camera;
 
 public class FirstPersonCamera : CameraController
 {
+	[Property, Category( "Components" )]
+	public GameObject ModelParent { get; set; }
+	
+	[Property, Category( "Components" )]
+	public Rigidbody Rigidbody { get; set; }
+
 	[Property]
 	private Vector3 Offset { get; set; } = new( 0, 1, 70 );
 	
@@ -21,12 +27,6 @@ public class FirstPersonCamera : CameraController
 	[Property]
 	private float PositionSmoothness { get; set; } = 25f;
 	
-	[Property]
-	public GameObject ModelParent { get; set; }
-	
-	[Property]
-	public Rigidbody Rigidbody { get; set; }
-	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, FeatureEnabled( nameof(UseCrouchOffset), Title = "Crouching" )]
 	public bool UseCrouchOffset { get; set; } = true;
@@ -38,10 +38,10 @@ public class FirstPersonCamera : CameraController
 	[Property, FeatureEnabled( nameof(UseCrouchOffset), Title = "Crouching" )]
 	public WalkController3D Movement { get; set; }
 	
+	private bool _initialized;
 	private Rotation _currentRotation = Rotation.Identity;
 	private float _currentPitch;
 	private Vector3 _smoothedPosition;
-	private bool _initialized;
 	private Vector3 _previousPlayerPosition;
 	
 	protected override void OnStart()
