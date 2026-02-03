@@ -89,8 +89,9 @@ public partial class WalkController3D : MovementController3D
 	[Property, Category( "State" )]
 	public float CurrentSpeed { get; set; }
 	
+	// ReSharper disable once MemberCanBePrivate.Global
 	// Ground object tracking for moving platforms
-	private GameObject GroundObject { get; set; }
+	public GameObject GroundObject { get; private set; }
 	public Collider GroundCollider { get; private set; }
 	
 	// ReSharper disable once MemberCanBePrivate.Global
