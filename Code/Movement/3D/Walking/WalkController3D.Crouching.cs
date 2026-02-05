@@ -21,7 +21,7 @@ public partial class WalkController3D
 	public bool IsCrouched { get; set; }
 	
 	// ReSharper disable once MemberCanBePrivate.Global
-	[Property, Group( "Inputs" ), InputAction]
+	[Property, Feature( "CanCrouch" ), InputAction]
 	public string CrouchInput { get; set; } = "duck";
 	
 	public float CrouchFactor { get; private set; }

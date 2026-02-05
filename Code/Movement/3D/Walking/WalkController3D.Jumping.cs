@@ -28,7 +28,7 @@ public partial class WalkController3D
 	public float JumpBufferTime { get; set; } = 0.2f;
 	
 	// ReSharper disable once MemberCanBePrivate.Global
-	[Property, Group( "Inputs" ), InputAction]
+	[Property, Feature( "CanJump" ), InputAction]
 	public string JumpInput { get; set; } = "Jump";
 	
 	private bool _wishJump;
