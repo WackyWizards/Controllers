@@ -6,9 +6,6 @@ using Sandbox.Diagnostics;
 
 namespace Controllers.Movement;
 
-/// <summary>
-/// Kinematic walk controller
-/// </summary>
 public partial class WalkController3D : MovementController3D
 {
 	[Property, Category( "Components" )]
@@ -381,7 +378,6 @@ public partial class WalkController3D : MovementController3D
 		if ( Velocity.Length < 0.001f )
 		{
 			Velocity = Vector3.Zero;
-			
 			return;
 		}
 		
@@ -579,7 +575,6 @@ public partial class WalkController3D : MovementController3D
 			else
 			{
 				Velocity = Vector3.Zero;
-				
 				return false;
 			}
 		}
@@ -644,7 +639,6 @@ public partial class WalkController3D : MovementController3D
 		if ( !result.StartedSolid )
 		{
 			_stuckTries = 0;
-			
 			return false;
 		}
 		
@@ -665,13 +659,11 @@ public partial class WalkController3D : MovementController3D
 			if ( !result.StartedSolid )
 			{
 				WorldPosition = pos;
-				
 				return false;
 			}
 		}
 		
 		_stuckTries++;
-		
 		return true;
 	}
 	

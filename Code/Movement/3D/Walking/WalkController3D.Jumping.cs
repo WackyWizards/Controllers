@@ -14,7 +14,7 @@ public partial class WalkController3D
 	
 	// ReSharper disable once MemberCanBePrivate.Global
 	/// <summary>
-	/// Delay between allowing the player to jump again after landing. <br/>
+	/// Delay between allowing the player to jump again after landing.
 	/// </summary>
 	[Property, FeatureEnabled( "CanJump", Title = "Jumping" )]
 	public float LandingGracePeriod { get; set; } = 0.1f;
@@ -38,6 +38,9 @@ public partial class WalkController3D
 	private bool _hasJumpedSinceGrounded;
 	private TimeSince _timeSinceLanded;
 	
+	/// <summary>
+	/// Track when we leave the ground to enable coyote time
+	/// </summary>
 	private void HandleCoyoteTime()
 	{
 		if ( _wasGroundedLastFrame && !IsGrounded )
@@ -48,6 +51,9 @@ public partial class WalkController3D
 		_wasGroundedLastFrame = IsGrounded;
 	}
 	
+	/// <summary>
+	/// Handle jump input and buffering
+	/// </summary>
 	private void HandleJumpInput()
 	{
 		if ( !CanJump )
@@ -55,6 +61,7 @@ public partial class WalkController3D
 			return;
 		}
 		
+		// Buffer jump input
 		if ( Input.Pressed( JumpInput ) )
 		{
 			_jumpBuffer = JumpBufferTime;
@@ -77,6 +84,9 @@ public partial class WalkController3D
 		}
 	}
 	
+	/// <summary>
+	/// Execute the jump if conditions are met. Returns true if jumped.
+	/// </summary>
 	private bool Jump()
 	{
 		if ( !_wishJump )
@@ -92,6 +102,9 @@ public partial class WalkController3D
 		return true;
 	}
 	
+	/// <summary>
+	/// Reset jump flags when landing
+	/// </summary>
 	private void ResetJumpFlagOnLanding( bool wasGrounded )
 	{
 		if ( wasGrounded || !IsGrounded )

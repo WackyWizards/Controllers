@@ -29,6 +29,9 @@ public partial class WalkController3D
 	private bool _wishCrouch;
 	private float _originalCapsuleHeight;
 	
+	/// <summary>
+	/// Called internally to handle crouch input and state changes
+	/// </summary>
 	private void HandleCrouchInput()
 	{
 		if ( !CanCrouch )
@@ -36,6 +39,7 @@ public partial class WalkController3D
 			return;
 		}
 		
+		// Check for crouch input
 		if ( Input.Pressed( CrouchInput ) )
 		{
 			_wishCrouch = true;
@@ -45,6 +49,7 @@ public partial class WalkController3D
 			_wishCrouch = false;
 		}
 		
+		// Update crouch state
 		if ( _wishCrouch && !IsCrouched )
 		{
 			TryCrouch();
@@ -57,17 +62,28 @@ public partial class WalkController3D
 		UpdateCrouchVisuals();
 	}
 	
-	private void TryCrouch()
+	/// <summary>
+	/// Attempt to crouch.
+	/// </summary>
+	public void TryCrouch()
 	{
+		if ( !CanCrouch || IsCrouched )
+		{
+			return;
+		}
+		
 		IsCrouched = true;
 		CurrentSpeed = CrouchSpeed;
 		BodyHeight = CrouchHeight;
 		_maxs = _maxs.WithZ( CrouchHeight );
 	}
 	
-	private void TryUncrouch()
+	/// <summary>
+	/// Attempt to stand up from crouch.
+	/// </summary>
+	public void TryUncrouch()
 	{
-		if ( !CanStandUp() )
+		if ( !IsCrouched || !CanStandUp() )
 		{
 			return;
 		}
@@ -78,6 +94,9 @@ public partial class WalkController3D
 		_maxs = _maxs.WithZ( _originalCapsuleHeight );
 	}
 	
+	/// <summary>
+	/// Check if there's room to stand up
+	/// </summary>
 	private bool CanStandUp()
 	{
 		var standMins = _mins;
@@ -87,11 +106,15 @@ public partial class WalkController3D
 		// Check if there's room to stand
 		var tr = Scene.Trace.Box( standBBox, WorldPosition, WorldPosition )
 			.IgnoreGameObjectHierarchy( GameObject )
-			.WithoutTags( "player", "nocollide" ).Run();
+			.WithoutTags( "player", "nocollide" )
+			.Run();
 		
 		return !tr.Hit;
 	}
 	
+	/// <summary>
+	/// Smoothly interpolate the visual crouch factor
+	/// </summary>
 	private void UpdateCrouchVisuals()
 	{
 		var target = IsCrouched ? 1f : 0f;
