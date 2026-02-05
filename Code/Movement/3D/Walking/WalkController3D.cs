@@ -89,7 +89,12 @@ public partial class WalkController3D : MovementController3D
 	// ReSharper disable once MemberCanBePrivate.Global
 	// Ground object tracking for moving platforms
 	public GameObject GroundObject { get; private set; }
+	
+	// ReSharper disable once MemberCanBePrivate.Global
 	public Collider GroundCollider { get; private set; }
+	
+	private Transform _groundTransform;
+	private Vector3 _groundVelocity;
 	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Sync]
@@ -150,9 +155,6 @@ public partial class WalkController3D : MovementController3D
 	private Vector3 _originalVelocity;
 	private Vector3 _bumpVelocity;
 	
-	// Track base velocity to subtract collision-inherited velocity
-	private Vector3 _baseVelocity;
-	
 	private static readonly Logger Log = new( "WalkController" );
 	
 	protected override void OnStart()
@@ -212,6 +214,12 @@ public partial class WalkController3D : MovementController3D
 			Rigidbody.AngularVelocity = Vector3.Zero;
 		}
 		
+		if ( IsGrounded && GroundCollider.IsValid() )
+		{
+			_groundVelocity = GroundCollider.SurfaceVelocity.WithZ( 0 );
+			Velocity -= _groundVelocity;
+		}
+		
 		base.PreMove();
 	}
 	
@@ -228,32 +236,6 @@ public partial class WalkController3D : MovementController3D
 		
 		// Update grounded state
 		CategorizePosition();
-		
-		var wasGrounded = IsGrounded;
-		var previousGroundObject = GroundObject;
-		var platformDisplacement = Vector3.Zero;
-		
-		// Calculate platform displacement
-		if ( IsGrounded && GroundObject.IsValid() )
-		{
-			var collider = GroundObject.GetComponent<Collider>();
-			
-			if ( collider.IsValid() )
-			{
-				var groundVel = collider.GetVelocityAtPoint( WorldPosition );
-				platformDisplacement = groundVel * Scene.FixedDelta;
-				
-				// Surface velocity
-				if ( collider.SurfaceVelocity.Length > 0.001f )
-				{
-					var surfaceVel = collider.SurfaceVelocity;
-					platformDisplacement += surfaceVel * Scene.FixedDelta;
-				}
-			}
-		}
-		
-		// Store base velocity before movement
-		_baseVelocity = Velocity;
 		
 		// Handle inputs
 		HandleCoyoteTime();
@@ -282,51 +264,69 @@ public partial class WalkController3D : MovementController3D
 			Velocity += Scene.PhysicsWorld.Gravity * Scene.FixedDelta;
 		}
 		
-		// Update base velocity after acceleration/friction but before collision
-		_baseVelocity = Velocity;
-		
+		// Perform collision-based movement
 		PerformMove( IsGrounded );
 		
-		// After collision, clamp velocity to not exceed what we had before collision
-		// This prevents inheriting velocity from moving walls/objects
-		ClampInheritedVelocity();
-		
+		// Final ground check
 		CategorizePosition();
 		
-		// Apply platform displacement ONLY if we stayed on the same platform
-		if ( wasGrounded && IsGrounded && previousGroundObject == GroundObject && previousGroundObject.IsValid() )
-		{
-			if ( !platformDisplacement.IsNearZeroLength )
-			{
-				WorldPosition += platformDisplacement;
-			}
-		}
+		// Apply platform movement
+		ApplyPlatformMovement();
+		
+		// Apply ground velocity, for example for conveyor belts.
+		ApplyGroundVelocity();
 		
 		WishVelocity = _wishVelocity;
 	}
 	
 	/// <summary>
-	/// Prevent velocity from being increased by collisions with moving objects
+	/// Apply movement from platform (handles both transform and physics-based platforms)
 	/// </summary>
-	private void ClampInheritedVelocity()
+	private void ApplyPlatformMovement()
 	{
-		// Get the speed we had before collision
-		var baseSpeed = _baseVelocity.Length;
-		var currentSpeed = Velocity.Length;
-		
-		// If collision increased our speed, clamp it back down
-		if ( currentSpeed > baseSpeed + 0.1f ) // Small epsilon for floating point errors
+		if ( !IsGrounded || !GroundObject.IsValid() )
 		{
-			// Keep the direction from collision but limit the speed
-			if ( currentSpeed > 0.01f )
-			{
-				Velocity = Velocity.Normal * baseSpeed;
-			}
-			else
-			{
-				Velocity = _baseVelocity;
-			}
+			_groundTransform = default;
+			
+			return;
 		}
+		
+		var currentTransform = GroundObject.WorldTransform;
+		
+		// If we have a previous transform, calculate and apply the delta
+		if ( _groundTransform != default )
+		{
+			// Calculate position delta
+			var positionDelta = currentTransform.Position - _groundTransform.Position;
+			
+			// Calculate rotation delta
+			var rotationDelta = currentTransform.Rotation * _groundTransform.Rotation.Inverse;
+			var localPos = WorldPosition - _groundTransform.Position;
+			var rotatedPos = rotationDelta * localPos;
+			var rotationPositionDelta = rotatedPos - localPos;
+			
+			// Apply the transform movement
+			WorldPosition += positionDelta + rotationPositionDelta;
+			
+			// Add platform velocity (calculated from transform delta)
+			var platformVelocity = (positionDelta + rotationPositionDelta) / Scene.FixedDelta;
+			Velocity += platformVelocity;
+		}
+		
+		// Store current transform for next frame
+		_groundTransform = currentTransform;
+	}
+	
+	private void ApplyGroundVelocity()
+	{
+		if ( !IsGrounded )
+		{
+			_groundVelocity = Vector3.Zero;
+			return;
+		}
+		
+		Velocity += _groundVelocity;
+		WorldPosition += _groundVelocity * Scene.FixedDelta;
 	}
 	
 	/// <summary>
@@ -365,6 +365,7 @@ public partial class WalkController3D : MovementController3D
 		// Fallback to box trace if no rigidbody
 		// This uses the manually defined BodyGirth and BodyHeight values
 		var bbox = GetBBox();
+		
 		return Scene.Trace.Box( bbox, from, to )
 			.IgnoreGameObjectHierarchy( GameObject )
 			.WithoutTags( "player", "nocollide" );
@@ -673,7 +674,8 @@ public partial class WalkController3D : MovementController3D
 	private void CategorizePosition()
 	{
 		var wasGrounded = IsGrounded;
-		var vBumpOrigin = WorldPosition; // Save the position we're checking from
+		var previousGroundObject = GroundObject;
+		var vBumpOrigin = WorldPosition;
 		var point = vBumpOrigin + Vector3.Down * 2f;
 		
 		// We're flying upwards too fast, never land on ground
@@ -700,6 +702,12 @@ public partial class WalkController3D : MovementController3D
 		GroundObject = trace.GameObject;
 		GroundCollider = trace.Shape?.Collider;
 		
+		// Store ground transform when we first land or switch platforms
+		if ( GroundObject != previousGroundObject )
+		{
+			_groundTransform = GroundObject.WorldTransform;
+		}
+		
 		// Snap to ground if we moved and hit
 		if ( wasGrounded && !trace.StartedSolid && trace.Fraction > 0.0f && trace.Fraction < 1.0f )
 		{
@@ -718,6 +726,8 @@ public partial class WalkController3D : MovementController3D
 		GroundNormal = Vector3.Up;
 		GroundObject = null;
 		GroundCollider = null;
+		_groundTransform = default;
+		_groundVelocity = Vector3.Zero;
 	}
 	
 	/// <summary>
@@ -738,7 +748,6 @@ public partial class WalkController3D : MovementController3D
 		// Project movement onto ground plane
 		wishDir -= GroundNormal * Vector3.Dot( wishDir, GroundNormal );
 		wishDir = wishDir.Normal;
-		
 		Accelerate( wishDir, CurrentSpeed, Acceleration );
 	}
 	
