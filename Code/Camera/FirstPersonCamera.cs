@@ -13,7 +13,7 @@ public class FirstPersonCamera : CameraController
 	public Rigidbody Rigidbody { get; set; }
 
 	[Property]
-	private Vector3 Offset { get; set; } = new( 0, 1, 70 );
+	private Vector3 Offset { get; set; } = new( 0, 0, 65 );
 	
 	[Property]
 	private float MinPitchAngle { get; set; } = -89f;
