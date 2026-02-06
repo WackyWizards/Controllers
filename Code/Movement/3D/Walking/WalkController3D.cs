@@ -611,7 +611,7 @@ public partial class WalkController3D : MovementController3D
 		return true;
 	}
 	
-	public void AddImpulse( Vector3 impulse )
+	public void ApplyImpulse( Vector3 impulse )
 	{
 		Velocity += impulse;
 		
