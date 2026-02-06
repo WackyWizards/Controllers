@@ -155,6 +155,18 @@ public partial class WalkController3D : MovementController3D
 	private Vector3 _originalVelocity;
 	private Vector3 _bumpVelocity;
 	
+	private const float UnstuckUpOffset = 2f;
+	private const float GroundCheckDistance = 2f;
+	private const float FlyingUpwardThreshold = 40.0f;
+	private const float GroundedStepDownDistance = 0.1f;
+	private const float MinVelocityThreshold = 0.001f;
+	private const float MinSpeedThreshold = 0.1f;
+	private const float FullStopThreshold = 1f;
+	private const float MinMoveFraction = 0.01f;
+	private const float MinStepDelta = 0.5f;
+	private const float StepDeltaFallback = 0.5f;
+	private const int UnstuckAttemptsPerTick = 20;
+	
 	private static readonly Logger Log = new( "WalkController" );
 	
 	protected override void OnStart()
@@ -376,7 +388,7 @@ public partial class WalkController3D : MovementController3D
 	/// </summary>
 	private void PerformMove( bool useStep )
 	{
-		if ( Velocity.Length < 0.001f )
+		if ( Velocity.Length < MinVelocityThreshold )
 		{
 			Velocity = Vector3.Zero;
 			return;
@@ -451,7 +463,7 @@ public partial class WalkController3D : MovementController3D
 		var fraction = TryMove( timeDelta );
 		
 		// If we barely moved, keep the regular move result
-		if ( fraction <= 0.01f )
+		if ( fraction <= MinMoveFraction )
 		{
 			return;
 		}
@@ -473,7 +485,7 @@ public partial class WalkController3D : MovementController3D
 		var deltaLen = moveDelta.Length;
 		
 		// If it's really low, we're probably moving straight up or down
-		if ( deltaLen < 0.001f )
+		if ( deltaLen < MinVelocityThreshold )
 		{
 			// Keep regular move
 			return;
@@ -481,9 +493,9 @@ public partial class WalkController3D : MovementController3D
 		
 		var moveBack = Vector3.Zero;
 		
-		if ( deltaLen < 0.5f )
+		if ( deltaLen < MinStepDelta )
 		{
-			var newDelta = moveDelta.Normal * 0.5f;
+			var newDelta = moveDelta.Normal * StepDeltaFallback;
 			moveBack = moveDelta - newDelta;
 			moveDelta = newDelta;
 		}
@@ -643,16 +655,14 @@ public partial class WalkController3D : MovementController3D
 			return false;
 		}
 		
-		const int attemptsPerTick = 20;
-		
-		for ( var i = 0; i < attemptsPerTick; i++ )
+		for ( var i = 0; i < UnstuckAttemptsPerTick; i++ )
 		{
-			var pos = WorldPosition + Vector3.Random.Normal * (((float)_stuckTries) / 2.0f);
+			var pos = WorldPosition + Vector3.Random.Normal * (_stuckTries / 2.0f);
 			
 			// First try the up direction for moving platforms
 			if ( i == 0 )
 			{
-				pos = WorldPosition + Vector3.Up * 2;
+				pos = WorldPosition + Vector3.Up * UnstuckUpOffset;
 			}
 			
 			result = BuildTrace( pos, pos ).Run();
@@ -676,17 +686,17 @@ public partial class WalkController3D : MovementController3D
 		var wasGrounded = IsGrounded;
 		var previousGroundObject = GroundObject;
 		var vBumpOrigin = WorldPosition;
-		var point = vBumpOrigin + Vector3.Down * 2f;
+		var point = vBumpOrigin + Vector3.Down * GroundCheckDistance;
 		
 		// We're flying upwards too fast, never land on ground
-		if ( !IsGrounded && Velocity.z > 40.0f )
+		if ( !IsGrounded && Velocity.z > FlyingUpwardThreshold )
 		{
 			ClearGround();
 			return;
 		}
 		
 		// Trace down for ground detection
-		point.z -= wasGrounded ? StepHeight : 0.1f;
+		point.z -= wasGrounded ? StepHeight : GroundedStepDownDistance;
 		var trace = BuildTrace( vBumpOrigin, point ).Run();
 		
 		// Not on ground if we didn't hit or surface is too steep
@@ -790,7 +800,7 @@ public partial class WalkController3D : MovementController3D
 	{
 		var speed = Velocity.Length;
 		
-		if ( speed < 0.1f )
+		if ( speed < MinSpeedThreshold )
 		{
 			return;
 		}
@@ -802,14 +812,14 @@ public partial class WalkController3D : MovementController3D
 		// Scale velocity
 		var newSpeed = MathF.Max( speed - drop, 0f );
 		
-		if ( Math.Abs( newSpeed - speed ) > 0.001f )
+		if ( Math.Abs( newSpeed - speed ) > MinVelocityThreshold )
 		{
 			newSpeed /= speed;
 			Velocity *= newSpeed;
 		}
 		
 		// Full stop if very slow
-		if ( Velocity.Length < 1f )
+		if ( Velocity.Length < FullStopThreshold )
 		{
 			Velocity = Vector3.Zero;
 		}
