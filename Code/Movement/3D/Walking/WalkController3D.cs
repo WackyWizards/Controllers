@@ -98,10 +98,6 @@ public partial class WalkController3D : MovementController3D
 	private Transform _groundTransform;
 	private Vector3 _groundVelocity;
 	
-	// ReSharper disable once MemberCanBePrivate.Global
-	[Sync]
-	public Vector3 Velocity { get; set; }
-	
 	/// <summary>
 	/// Finds the first CapsuleCollider in the <see cref="Colliders"/> list. <br/>
 	/// This is typically the main body collision shape for the character. <br/>
