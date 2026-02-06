@@ -11,6 +11,9 @@ public partial class WalkController3D : MovementController3D
 	[Property, Category( "Components" )]
 	public CitizenAnimationHelper AnimationHelper { get; set; }
 	
+	/// <summary>
+	/// Primarily exists for physics and sweeping colliders.
+	/// </summary>
 	[Property, Category( "Components" )]
 	public Rigidbody Rigidbody { get; set; }
 	
@@ -27,6 +30,10 @@ public partial class WalkController3D : MovementController3D
 	[Property, Category( "Components" )]
 	public List<Collider> Colliders { get; set; } = [];
 	
+	/// <summary>
+	/// If true, any external impulses sent to the <see cref="Rigidbody"/> will be ignored. <br/>
+	/// Obviously does nothing if you don't have one.
+	/// </summary>
 	[Property]
 	public bool SkipImpulses { get; set; }
 	
@@ -221,8 +228,7 @@ public partial class WalkController3D : MovementController3D
 	
 	protected override void PreMove()
 	{
-		// Reset rigidbody velocity at the start of our movement frame
-		// This prevents inherited velocity from previous physics interactions
+		// Pull external physics velocity into the controller and prevent the Rigidbody from integrating movement itself
 		if ( Rigidbody.IsValid() && !IsProxy )
 		{
 			if ( !SkipImpulses )
@@ -295,7 +301,10 @@ public partial class WalkController3D : MovementController3D
 		// Apply platform movement
 		ApplyPlatformMovement();
 		
-		// Apply ground velocity, for example for conveyor belts.
+		/*
+			Apply surface velocity from the ground (e.g. conveyors),
+			unless movement was already handled via platform transform delta
+		*/
 		ApplyGroundVelocity();
 		
 		WishVelocity = _wishVelocity;
@@ -697,7 +706,8 @@ public partial class WalkController3D : MovementController3D
 	}
 	
 	/// <summary>
-	/// Check if we're on ground and update ground normal
+	/// Determine grounded state, ground normal, and active ground object,
+	/// including step-down snapping and platform tracking
 	/// </summary>
 	private void CategorizePosition()
 	{
