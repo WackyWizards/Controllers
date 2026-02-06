@@ -792,19 +792,12 @@ public partial class WalkController3D : MovementController3D
 	
 	private float GetGroundFriction()
 	{
-		if ( !GroundObject.IsValid() )
+		if ( !GroundCollider.IsValid() )
 		{
 			return GroundFriction;
 		}
 		
-		var collider = GroundObject.GetComponent<Collider>();
-		
-		if ( !collider.IsValid() )
-		{
-			return GroundFriction;
-		}
-		
-		return collider.Friction ?? GroundFriction;
+		return GroundCollider.Friction ?? GroundFriction;
 	}
 	
 	/// <summary>
