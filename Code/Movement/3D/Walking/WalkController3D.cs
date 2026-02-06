@@ -95,9 +95,6 @@ public partial class WalkController3D : MovementController3D
 	// ReSharper disable once MemberCanBePrivate.Global
 	public Collider GroundCollider { get; private set; }
 	
-	private Transform _groundTransform;
-	private Vector3 _groundVelocity;
-	
 	/// <summary>
 	/// Finds the first CapsuleCollider in the <see cref="Colliders"/> list. <br/>
 	/// This is typically the main body collision shape for the character. <br/>
@@ -146,6 +143,9 @@ public partial class WalkController3D : MovementController3D
 	private Rotation _eyeRotation;
 	private int _stuckTries;
 	private bool _usedPlatformTransform;
+	private Vector3 _accumulatedForces;
+	private Transform _groundTransform;
+	private Vector3 _groundVelocity;
 	
 	// Velocity clipping planes for collision
 	private const int MaxClipPlanes = 3;
@@ -268,6 +268,13 @@ public partial class WalkController3D : MovementController3D
 			}
 		}
 		
+		// Apply accumulated forces
+		if ( !_accumulatedForces.IsNearZeroLength )
+		{
+			Velocity += _accumulatedForces * Scene.FixedDelta;
+			_accumulatedForces = Vector3.Zero; // Clear after applying
+		}
+		
 		// Apply gravity
 		if ( !IsGrounded )
 		{
@@ -283,10 +290,7 @@ public partial class WalkController3D : MovementController3D
 		// Apply platform movement
 		ApplyPlatformMovement();
 		
-		/*
-			Apply surface velocity from the ground (e.g. conveyors),
-			unless movement was already handled via platform transform delta
-		*/
+		// Apply surface velocity from the ground
 		ApplyGroundVelocity();
 		
 		WishVelocity = _wishVelocity;
@@ -611,15 +615,80 @@ public partial class WalkController3D : MovementController3D
 		return true;
 	}
 	
+	/// <summary>
+	/// Apply an instant impulse to the character (e.g., explosion, jump pad)
+	/// </summary>
 	public void ApplyImpulse( Vector3 impulse )
 	{
-		Velocity += impulse;
-		
-		// If upward impulse, clear grounded state so it doesn't get dampened
-		if ( impulse.z > 0 )
-		{
-			ClearGround();
-		}
+    	Velocity += impulse;
+    
+    	// If upward impulse, clear grounded state so it doesn't get dampened
+    	if ( impulse.z > 0 )
+    	{
+        	ClearGround();
+    	}
+	}
+
+	/// <summary>
+	/// Apply an impulse at a world position (simulates offset force)
+	/// For character controllers, this applies the linear component and optionally
+	/// a "spin" effect based on the offset from center
+	/// </summary>
+	public void ApplyImpulseAt( Vector3 worldPosition, Vector3 impulse, bool applyRotationalEffect = false )
+	{
+    	// Apply the direct linear impulse
+    	Velocity += impulse;
+    
+    	if ( applyRotationalEffect )
+    	{
+        	// Calculate offset from character center
+        	var offset = worldPosition - WorldPosition;
+        
+        	// Create a lateral "spin" effect based on the perpendicular component
+        	var lateralEffect = Vector3.Cross( offset.WithZ( 0 ), impulse.WithZ( 0 ) );
+        
+        	// Apply as a velocity adjustment (scaled down for character control)
+        	Velocity += lateralEffect * 0.1f;
+    	}
+    
+    	// Clear ground if upward force
+    	if ( impulse.z > 0 )
+    	{
+        	ClearGround();
+    	}
+	}
+
+	/// <summary>
+	/// Apply continuous force (accumulated over time, applied each frame)
+	/// Use this for things like wind, water current, or conveyor belts
+	/// </summary>
+	public void ApplyForce( Vector3 force )
+	{
+    	// Forces are accumulated and applied during movement
+    	_accumulatedForces += force;
+	}
+
+	/// <summary>
+	/// Apply continuous force at a position
+	/// </summary>
+	public void ApplyForceAt( Vector3 worldPosition, Vector3 force, bool applyRotationalEffect = false )
+	{
+    	_accumulatedForces += force;
+    
+    	if ( applyRotationalEffect )
+    	{
+        	var offset = worldPosition - WorldPosition;
+        	var lateralEffect = Vector3.Cross( offset.WithZ( 0 ), force.WithZ( 0 ) );
+        	_accumulatedForces += lateralEffect * 0.1f;
+    	}
+	}
+
+	/// <summary>
+	/// Clear all accumulated forces
+	/// </summary>
+	public void ClearForces()
+	{
+    	_accumulatedForces = Vector3.Zero;
 	}
 	
 	/// <summary>
