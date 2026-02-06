@@ -149,6 +149,7 @@ public partial class WalkController3D : MovementController3D
 	private Vector3 _wishVelocity;
 	private Rotation _eyeRotation;
 	private int _stuckTries;
+	private bool _usedPlatformTransform;
 	
 	// Velocity clipping planes for collision
 	private const int MaxClipPlanes = 3;
@@ -308,30 +309,32 @@ public partial class WalkController3D : MovementController3D
 		if ( !IsGrounded || !GroundObject.IsValid() )
 		{
 			_groundTransform = default;
-			
+			_usedPlatformTransform = false;
 			return;
 		}
 		
 		var currentTransform = GroundObject.WorldTransform;
+		_usedPlatformTransform = false;
 		
 		// If we have a previous transform, calculate and apply the delta
 		if ( _groundTransform != default )
 		{
-			// Calculate position delta
 			var positionDelta = currentTransform.Position - _groundTransform.Position;
-			
-			// Calculate rotation delta
 			var rotationDelta = currentTransform.Rotation * _groundTransform.Rotation.Inverse;
+			
 			var localPos = WorldPosition - _groundTransform.Position;
 			var rotatedPos = rotationDelta * localPos;
 			var rotationPositionDelta = rotatedPos - localPos;
 			
-			// Apply the transform movement
-			WorldPosition += positionDelta + rotationPositionDelta;
+			var totalDelta = positionDelta + rotationPositionDelta;
 			
-			// Add platform velocity (calculated from transform delta)
-			var platformVelocity = (positionDelta + rotationPositionDelta) / Scene.FixedDelta;
-			Velocity += platformVelocity;
+			if ( !totalDelta.IsNearZeroLength )
+			{
+				_usedPlatformTransform = true;
+				
+				WorldPosition += totalDelta;
+				Velocity += totalDelta / Scene.FixedDelta;
+			}
 		}
 		
 		// Store current transform for next frame
@@ -343,6 +346,11 @@ public partial class WalkController3D : MovementController3D
 		if ( !IsGrounded )
 		{
 			_groundVelocity = Vector3.Zero;
+			return;
+		}
+		
+		if ( _usedPlatformTransform )
+		{
 			return;
 		}
 		
@@ -420,6 +428,7 @@ public partial class WalkController3D : MovementController3D
 	{
 		var timeLeft = timeDelta;
 		float travelFraction = 0;
+		
 		_clipPlaneCount = 0;
 		_originalVelocity = Velocity;
 		_bumpVelocity = Velocity;
@@ -725,6 +734,7 @@ public partial class WalkController3D : MovementController3D
 		if ( GroundObject != previousGroundObject )
 		{
 			_groundTransform = GroundObject.WorldTransform;
+			_usedPlatformTransform = false;
 		}
 		
 		// Snap to ground if we moved and hit
