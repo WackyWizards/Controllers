@@ -30,13 +30,6 @@ public partial class WalkController3D : MovementController3D
 	[Property, Category( "Components" )]
 	public List<Collider> Colliders { get; set; } = [];
 	
-	/// <summary>
-	/// If true, any external impulses sent to the <see cref="Rigidbody"/> will be ignored. <br/>
-	/// Obviously does nothing if you don't have one.
-	/// </summary>
-	[Property]
-	public bool SkipImpulses { get; set; }
-	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "Movement" )]
 	public float WalkSpeed { get; set; } = 190f;
@@ -228,15 +221,8 @@ public partial class WalkController3D : MovementController3D
 	
 	protected override void PreMove()
 	{
-		// Pull external physics velocity into the controller and prevent the Rigidbody from integrating movement itself
 		if ( Rigidbody.IsValid() && !IsProxy )
 		{
-			if ( !SkipImpulses )
-			{
-				// Pull external physics influence into controller
-				Velocity += Rigidbody.Velocity;
-			}
-			
 			// Clear physics so it doesn't integrate twice
 			Rigidbody.Velocity = Vector3.Zero;
 			Rigidbody.AngularVelocity = Vector3.Zero;
@@ -627,6 +613,17 @@ public partial class WalkController3D : MovementController3D
 		}
 		
 		return true;
+	}
+	
+	public void AddImpulse( Vector3 impulse )
+	{
+		Velocity += impulse;
+		
+		// If upward impulse, clear grounded state so it doesn't get dampened
+		if ( impulse.z > 0 )
+		{
+			ClearGround();
+		}
 	}
 	
 	/// <summary>
