@@ -11,7 +11,6 @@ public partial class WalkController3D : MovementController3D
 	[Property, Category( "Components" )]
 	public CitizenAnimationHelper AnimationHelper { get; set; }
 	
-	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "Components" )]
 	public Rigidbody Rigidbody { get; set; }
 	
@@ -27,6 +26,9 @@ public partial class WalkController3D : MovementController3D
 	/// </summary>
 	[Property, Category( "Components" )]
 	public List<Collider> Colliders { get; set; } = [];
+	
+	[Property]
+	public bool SkipImpulses { get; set; }
 	
 	// ReSharper disable once MemberCanBePrivate.Global
 	[Property, Category( "Movement" )]
@@ -222,6 +224,13 @@ public partial class WalkController3D : MovementController3D
 		// This prevents inherited velocity from previous physics interactions
 		if ( Rigidbody.IsValid() && !IsProxy )
 		{
+			if ( !SkipImpulses )
+			{
+				// Pull external physics influence into controller
+				Velocity += Rigidbody.Velocity;
+			}
+			
+			// Clear physics so it doesn't integrate twice
 			Rigidbody.Velocity = Vector3.Zero;
 			Rigidbody.AngularVelocity = Vector3.Zero;
 		}
