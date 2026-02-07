@@ -65,11 +65,11 @@ public partial class WalkController3D
 	/// <summary>
 	/// Attempt to crouch.
 	/// </summary>
-	public void TryCrouch()
+	public bool TryCrouch()
 	{
 		if ( !CanCrouch || IsCrouched )
 		{
-			return;
+			return false;
 		}
 		
 		IsCrouched = true;
@@ -77,16 +77,18 @@ public partial class WalkController3D
 		BodyHeight = CrouchHeight;
 		_maxs = _maxs.WithZ( CrouchHeight );
 		OnCrouchStarted?.Invoke();
+		
+		return true;
 	}
 	
 	/// <summary>
 	/// Attempt to stand up from crouch.
 	/// </summary>
-	public void TryUncrouch()
+	public bool TryUncrouch()
 	{
 		if ( !IsCrouched || !CanStandUp() )
 		{
-			return;
+			return false;
 		}
 		
 		IsCrouched = false;
@@ -94,6 +96,8 @@ public partial class WalkController3D
 		BodyHeight = _originalCapsuleHeight;
 		_maxs = _maxs.WithZ( _originalCapsuleHeight );
 		OnCrouchEnded?.Invoke();
+		
+		return true;
 	}
 	
 	/// <summary>
