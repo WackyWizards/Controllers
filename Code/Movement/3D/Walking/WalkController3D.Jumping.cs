@@ -87,7 +87,7 @@ public partial class WalkController3D
 	/// <summary>
 	/// Execute the jump if conditions are met. Returns true if jumped.
 	/// </summary>
-	private bool Jump()
+	public bool Jump()
 	{
 		if ( !_wishJump )
 		{
@@ -98,6 +98,7 @@ public partial class WalkController3D
 		_wishJump = false;
 		_hasJumpedSinceGrounded = true;
 		IsGrounded = false;
+		OnJumped?.Invoke( Velocity );
 		
 		return true;
 	}

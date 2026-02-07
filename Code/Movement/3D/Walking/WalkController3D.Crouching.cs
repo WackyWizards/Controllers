@@ -76,6 +76,7 @@ public partial class WalkController3D
 		CurrentSpeed = CrouchSpeed;
 		BodyHeight = CrouchHeight;
 		_maxs = _maxs.WithZ( CrouchHeight );
+		OnCrouchStarted?.Invoke();
 	}
 	
 	/// <summary>
@@ -92,6 +93,7 @@ public partial class WalkController3D
 		CurrentSpeed = WalkSpeed;
 		BodyHeight = _originalCapsuleHeight;
 		_maxs = _maxs.WithZ( _originalCapsuleHeight );
+		OnCrouchEnded?.Invoke();
 	}
 	
 	/// <summary>

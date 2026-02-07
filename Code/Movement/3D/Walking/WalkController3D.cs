@@ -238,14 +238,30 @@ public partial class WalkController3D : MovementController3D
 	/// </summary>
 	protected override void Move()
 	{
+		var previousVelocity = Velocity;
+		var previousSpeed = Velocity.Length;
+		
 		// Try to unstuck first
 		if ( TryUnstuck() )
 		{
 			return;
 		}
 		
+		var wasGrounded = IsGrounded;
+		
 		// Update grounded state
 		CategorizePosition();
+		
+		// Check for landing/leaving ground
+		if ( !wasGrounded && IsGrounded )
+		{
+			var impactSpeed = -previousVelocity.z;
+			OnLanded?.Invoke( impactSpeed );
+		}
+		else if ( wasGrounded && !IsGrounded )
+		{
+			OnLeftGround?.Invoke();
+		}
 		
 		// Handle inputs
 		HandleCoyoteTime();
@@ -272,7 +288,7 @@ public partial class WalkController3D : MovementController3D
 		if ( !_accumulatedForces.IsNearZeroLength )
 		{
 			Velocity += _accumulatedForces * Scene.FixedDelta;
-			_accumulatedForces = Vector3.Zero; // Clear after applying
+			_accumulatedForces = Vector3.Zero;
 		}
 		
 		// Apply gravity
@@ -292,8 +308,27 @@ public partial class WalkController3D : MovementController3D
 		
 		// Apply surface velocity from the ground
 		ApplyGroundVelocity();
-		
 		WishVelocity = _wishVelocity;
+		
+		// Invoke movement event
+		if ( !Velocity.IsNearZeroLength )
+		{
+			OnMove?.Invoke( Velocity );
+		}
+		
+		// Check for velocity changes
+		if ( !previousVelocity.AlmostEqual( Velocity ) )
+		{
+			OnVelocityChanged?.Invoke( previousVelocity, Velocity );
+		}
+		
+		// Check for speed changes
+		var currentSpeed = Velocity.Length;
+		
+		if ( MathF.Abs( currentSpeed - previousSpeed ) > 10f ) // Threshold for significant change
+		{
+			OnSpeedChanged?.Invoke( previousSpeed, currentSpeed );
+		}
 	}
 	
 	/// <summary>
@@ -305,6 +340,7 @@ public partial class WalkController3D : MovementController3D
 		{
 			_groundTransform = default;
 			_usedPlatformTransform = false;
+			
 			return;
 		}
 		
@@ -316,19 +352,19 @@ public partial class WalkController3D : MovementController3D
 		{
 			var positionDelta = currentTransform.Position - _groundTransform.Position;
 			var rotationDelta = currentTransform.Rotation * _groundTransform.Rotation.Inverse;
-			
 			var localPos = WorldPosition - _groundTransform.Position;
 			var rotatedPos = rotationDelta * localPos;
 			var rotationPositionDelta = rotatedPos - localPos;
-			
 			var totalDelta = positionDelta + rotationPositionDelta;
 			
 			if ( !totalDelta.IsNearZeroLength )
 			{
 				_usedPlatformTransform = true;
-				
 				WorldPosition += totalDelta;
 				Velocity += totalDelta / Scene.FixedDelta;
+				
+				// Invoke platform movement event
+				OnPlatformMove?.Invoke( GroundObject, totalDelta );
 			}
 		}
 		
@@ -341,6 +377,7 @@ public partial class WalkController3D : MovementController3D
 		if ( !IsGrounded )
 		{
 			_groundVelocity = Vector3.Zero;
+			
 			return;
 		}
 		
@@ -380,9 +417,7 @@ public partial class WalkController3D : MovementController3D
 		{
 			// This will trace with ALL colliders that are children of the Rigidbody's GameObject
 			// The Rigidbody automatically discovers and uses these colliders
-			return Scene.Trace.Body( Rigidbody, to )
-				.FromTo( from, to )
-				.IgnoreGameObjectHierarchy( GameObject )
+			return Scene.Trace.Body( Rigidbody, to ).FromTo( from, to ).IgnoreGameObjectHierarchy( GameObject )
 				.WithoutTags( "player", "nocollide" );
 		}
 		
@@ -390,8 +425,7 @@ public partial class WalkController3D : MovementController3D
 		// This uses the manually defined BodyGirth and BodyHeight values
 		var bbox = GetBBox();
 		
-		return Scene.Trace.Box( bbox, from, to )
-			.IgnoreGameObjectHierarchy( GameObject )
+		return Scene.Trace.Box( bbox, from, to ).IgnoreGameObjectHierarchy( GameObject )
 			.WithoutTags( "player", "nocollide" );
 	}
 	
@@ -403,6 +437,7 @@ public partial class WalkController3D : MovementController3D
 		if ( Velocity.Length < MinVelocityThreshold )
 		{
 			Velocity = Vector3.Zero;
+			
 			return;
 		}
 		
@@ -423,7 +458,6 @@ public partial class WalkController3D : MovementController3D
 	{
 		var timeLeft = timeDelta;
 		float travelFraction = 0;
-		
 		_clipPlaneCount = 0;
 		_originalVelocity = Velocity;
 		_bumpVelocity = Velocity;
@@ -446,6 +480,9 @@ public partial class WalkController3D : MovementController3D
 				
 				break;
 			}
+			
+			// Invoke collision event
+			OnCollision?.Invoke( trace );
 			
 			if ( trace.Fraction > 0 )
 			{
@@ -553,6 +590,13 @@ public partial class WalkController3D : MovementController3D
 		}
 		
 		// Step move was better, use it
+		var stepHeightUsed = stepPosition.z - startPosition.z;
+		
+		if ( stepHeightUsed > 1f ) // Only fire event for significant steps
+		{
+			OnStep?.Invoke( stepHeightUsed );
+		}
+		
 		WorldPosition = stepPosition;
 		Velocity = stepVelocity;
 	}
@@ -578,6 +622,18 @@ public partial class WalkController3D : MovementController3D
 		
 		_clipPlanes[_clipPlaneCount++] = normal;
 		
+		// Check what we hit
+		var angle = Vector3.GetAngle( Vector3.Up, normal );
+		
+		if ( angle < 10f ) // Hit ceiling
+		{
+			OnHitCeiling?.Invoke( normal );
+		}
+		else if ( angle > GroundAngle ) // Hit wall
+		{
+			OnHitWall?.Invoke( normal );
+		}
+		
 		// First plane - apply bounce
 		if ( _clipPlaneCount == 1 )
 		{
@@ -601,6 +657,7 @@ public partial class WalkController3D : MovementController3D
 			else
 			{
 				Velocity = Vector3.Zero;
+				
 				return false;
 			}
 		}
@@ -609,6 +666,7 @@ public partial class WalkController3D : MovementController3D
 		if ( Velocity.Dot( _originalVelocity ) <= 0 )
 		{
 			Velocity = Vector3.Zero;
+			
 			return false;
 		}
 		
@@ -620,15 +678,17 @@ public partial class WalkController3D : MovementController3D
 	/// </summary>
 	public void ApplyImpulse( Vector3 impulse )
 	{
-    	Velocity += impulse;
-    
-    	// If upward impulse, clear grounded state so it doesn't get dampened
-    	if ( impulse.z > 0 )
-    	{
-        	ClearGround();
-    	}
+		Velocity += impulse;
+		
+		// If upward impulse, clear grounded state so it doesn't get dampened
+		if ( impulse.z > 0 )
+		{
+			ClearGround();
+		}
+		
+		OnImpulseApplied?.Invoke( impulse );
 	}
-
+	
 	/// <summary>
 	/// Apply an impulse at a world position (simulates offset force)
 	/// For character controllers, this applies the linear component and optionally
@@ -636,59 +696,65 @@ public partial class WalkController3D : MovementController3D
 	/// </summary>
 	public void ApplyImpulseAt( Vector3 worldPosition, Vector3 impulse, bool applyRotationalEffect = false )
 	{
-    	// Apply the direct linear impulse
-    	Velocity += impulse;
-    
-    	if ( applyRotationalEffect )
-    	{
-        	// Calculate offset from character center
-        	var offset = worldPosition - WorldPosition;
-        
-        	// Create a lateral "spin" effect based on the perpendicular component
-        	var lateralEffect = Vector3.Cross( offset.WithZ( 0 ), impulse.WithZ( 0 ) );
-        
-        	// Apply as a velocity adjustment (scaled down for character control)
-        	Velocity += lateralEffect * 0.1f;
-    	}
-    
-    	// Clear ground if upward force
-    	if ( impulse.z > 0 )
-    	{
-        	ClearGround();
-    	}
+		// Apply the direct linear impulse
+		Velocity += impulse;
+		
+		if ( applyRotationalEffect )
+		{
+			// Calculate offset from character center
+			var offset = worldPosition - WorldPosition;
+			
+			// Create a lateral "spin" effect based on the perpendicular component
+			var lateralEffect = Vector3.Cross( offset.WithZ( 0 ), impulse.WithZ( 0 ) );
+			
+			// Apply as a velocity adjustment (scaled down for character control)
+			Velocity += lateralEffect * 0.1f;
+		}
+		
+		// Clear ground if upward force
+		if ( impulse.z > 0 )
+		{
+			ClearGround();
+		}
+		
+		OnImpulseAppliedAt?.Invoke( worldPosition, impulse );
 	}
-
+	
 	/// <summary>
 	/// Apply continuous force (accumulated over time, applied each frame)
 	/// Use this for things like wind, water current, or conveyor belts
 	/// </summary>
 	public void ApplyForce( Vector3 force )
 	{
-    	// Forces are accumulated and applied during movement
-    	_accumulatedForces += force;
+		// Forces are accumulated and applied during movement
+		_accumulatedForces += force;
+		OnForceApplied?.Invoke( force );
 	}
-
+	
 	/// <summary>
 	/// Apply continuous force at a position
 	/// </summary>
 	public void ApplyForceAt( Vector3 worldPosition, Vector3 force, bool applyRotationalEffect = false )
 	{
-    	_accumulatedForces += force;
-    
-    	if ( applyRotationalEffect )
-    	{
-        	var offset = worldPosition - WorldPosition;
-        	var lateralEffect = Vector3.Cross( offset.WithZ( 0 ), force.WithZ( 0 ) );
-        	_accumulatedForces += lateralEffect * 0.1f;
-    	}
+		_accumulatedForces += force;
+		
+		if ( applyRotationalEffect )
+		{
+			var offset = worldPosition - WorldPosition;
+			var lateralEffect = Vector3.Cross( offset.WithZ( 0 ), force.WithZ( 0 ) );
+			_accumulatedForces += lateralEffect * 0.1f;
+		}
+		
+		OnForceAppliedAt?.Invoke( worldPosition, force );
 	}
-
+	
 	/// <summary>
 	/// Clear all accumulated forces
 	/// </summary>
 	public void ClearForces()
 	{
-    	_accumulatedForces = Vector3.Zero;
+		_accumulatedForces = Vector3.Zero;
+		OnForcesCleared?.Invoke();
 	}
 	
 	/// <summary>
@@ -740,9 +806,18 @@ public partial class WalkController3D : MovementController3D
 		// Not stuck
 		if ( !result.StartedSolid )
 		{
+			if ( _stuckTries > 0 )
+			{
+				OnUnstuck?.Invoke();
+			}
+			
 			_stuckTries = 0;
+			
 			return false;
 		}
+		
+		// Invoke stuck event
+		OnStuck?.Invoke( _stuckTries );
 		
 		for ( var i = 0; i < UnstuckAttemptsPerTick; i++ )
 		{
@@ -759,22 +834,25 @@ public partial class WalkController3D : MovementController3D
 			if ( !result.StartedSolid )
 			{
 				WorldPosition = pos;
+				OnUnstuck?.Invoke();
+				
 				return false;
 			}
 		}
 		
 		_stuckTries++;
+		
 		return true;
 	}
 	
 	/// <summary>
-	/// Determine grounded state, ground normal, and active ground object,
-	/// including step-down snapping and platform tracking
+	/// Determine grounded state, ground normal, and active ground object
 	/// </summary>
 	private void CategorizePosition()
 	{
 		var wasGrounded = IsGrounded;
 		var previousGroundObject = GroundObject;
+		var previousGroundCollider = GroundCollider;
 		var vBumpOrigin = WorldPosition;
 		var point = vBumpOrigin + Vector3.Down * GroundCheckDistance;
 		
@@ -782,6 +860,7 @@ public partial class WalkController3D : MovementController3D
 		if ( !IsGrounded && Velocity.z > FlyingUpwardThreshold )
 		{
 			ClearGround();
+			
 			return;
 		}
 		
@@ -793,6 +872,7 @@ public partial class WalkController3D : MovementController3D
 		if ( !trace.Hit || Vector3.GetAngle( Vector3.Up, trace.Normal ) > GroundAngle )
 		{
 			ClearGround();
+			
 			return;
 		}
 		
@@ -801,6 +881,18 @@ public partial class WalkController3D : MovementController3D
 		GroundNormal = trace.Normal;
 		GroundObject = trace.GameObject;
 		GroundCollider = trace.Shape?.Collider;
+		
+		// Check for ground object change
+		if ( GroundObject != previousGroundObject && previousGroundObject.IsValid() )
+		{
+			OnGroundChanged?.Invoke( previousGroundObject, GroundObject );
+		}
+		
+		// Check for surface change
+		if ( GroundCollider != previousGroundCollider && previousGroundCollider.IsValid() )
+		{
+			OnGroundSurfaceChanged?.Invoke( previousGroundCollider, GroundCollider );
+		}
 		
 		// Store ground transform when we first land or switch platforms
 		if ( GroundObject != previousGroundObject )
